@@ -1,5 +1,6 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
+import zlib from "node:zlib";
 import httpProxy from "http-proxy";
 import { memoryStore } from "../storage/memoryStore";
 import { captureRequest } from "./requestCapture";
@@ -8,6 +9,38 @@ import { captureResponse } from "./responseCapture";
 export interface ProxyServerOptions {
   port: number;
   target: string;
+  ignoreHeaders?: string[];
+  ignorePaths?: string[];
+  maxBodyBytes?: number;
+}
+
+function shouldIgnorePath(path: string, ignorePaths: string[] | undefined): boolean {
+  if (!ignorePaths || ignorePaths.length === 0) return false;
+  return ignorePaths.some((p) => p && (path === p || path.startsWith(p)));
+}
+
+function maybeTruncateUtf8(text: string, maxBytes: number | undefined): string {
+  if (!maxBytes || maxBytes <= 0) return text;
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes <= maxBytes) return text;
+  const buf = Buffer.from(text, "utf8");
+  const sliced = buf.subarray(0, maxBytes).toString("utf8");
+  return `${sliced}\n…(truncated to ${maxBytes} bytes)`;
+}
+
+function decompressForCapture(proxyRes: IncomingMessage, raw: Buffer): string {
+  const encHeader = proxyRes.headers["content-encoding"];
+  const enc = (Array.isArray(encHeader) ? encHeader[0] : encHeader)?.toString().toLowerCase();
+
+  try {
+    if (enc === "gzip") return zlib.gunzipSync(raw).toString("utf8");
+    if (enc === "deflate") return zlib.inflateSync(raw).toString("utf8");
+    if (enc === "br") return zlib.brotliDecompressSync(raw).toString("utf8");
+  } catch {
+    // If decompression fails, fall back to raw UTF-8 decoding.
+  }
+
+  return raw.toString("utf8");
 }
 
 function readStreamBody(req: IncomingMessage): Promise<string | undefined> {
@@ -31,6 +64,22 @@ function readStreamBody(req: IncomingMessage): Promise<string | undefined> {
  * - Intercept request + response data for the dashboard
  */
 export function startProxyServer(opts: ProxyServerOptions): http.Server {
+  function stripHeaders(
+    headers: Record<string, string> | undefined,
+    ignore: string[] | undefined
+  ): Record<string, string> | undefined {
+    if (!headers) return headers;
+    if (!ignore || ignore.length === 0) return headers;
+
+    const ignoreSet = new Set(ignore.map((h) => h.toLowerCase()));
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(headers)) {
+      if (ignoreSet.has(k.toLowerCase())) continue;
+      out[k] = v;
+    }
+    return out;
+  }
+
   const proxy = httpProxy.createProxyServer({
     target: opts.target,
     changeOrigin: true,
@@ -58,15 +107,20 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     const chunks: Buffer[] = [];
     proxyRes.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
     proxyRes.on("end", () => {
-      const body = Buffer.concat(chunks).toString("utf8");
+      const rawBody = Buffer.concat(chunks);
+      const capturedBody = maybeTruncateUtf8(decompressForCapture(proxyRes, rawBody), opts.maxBodyBytes);
 
       if (requestId && startedAt) {
-        memoryStore.update(requestId, captureResponse(proxyRes, body, startedAt));
+      const patch = captureResponse(proxyRes, capturedBody, startedAt);
+      patch.responseHeaders = stripHeaders(patch.responseHeaders, opts.ignoreHeaders);
+      patch.rawResponseHeaders = stripHeaders(patch.rawResponseHeaders, opts.ignoreHeaders);
+      memoryStore.update(requestId, patch);
       }
 
       const headers: Record<string, string | string[] | undefined> = { ...proxyRes.headers };
       (res as ServerResponse).writeHead(proxyRes.statusCode ?? 200, headers);
-      (res as ServerResponse).end(body);
+      // Forward response to client unchanged (still compressed if upstream sent it that way).
+      (res as ServerResponse).end(rawBody);
     });
   });
 
@@ -75,11 +129,20 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
 
     const targetUrl = new URL(req.url ?? "/", opts.target).toString();
 
+    const requestPath = req.url ?? "/";
+    if (shouldIgnorePath(requestPath, opts.ignorePaths)) {
+      proxy.web(req, res, { target: opts.target });
+      return;
+    }
+
     // Read the incoming request body once. Since http-proxy will need a readable
     // stream, we re-create a new request stream by writing the body into proxyReq.
-    const body = await readStreamBody(req);
+    const body = maybeTruncateUtf8((await readStreamBody(req)) ?? "", opts.maxBodyBytes) || undefined;
 
     const captured = captureRequest(req, body, targetUrl);
+    captured.headers = stripHeaders(captured.headers, opts.ignoreHeaders) ?? {};
+    captured.rawHeaders = stripHeaders(captured.rawHeaders, opts.ignoreHeaders);
+
     memoryStore.add(captured);
 
     (req as any).__flowlyStartedAt = startedAt;

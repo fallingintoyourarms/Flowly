@@ -4,26 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog.
 
-## [0.3.1] - 2026-03-10
+## [0.1.4] - 2026-03-10
+
+### Added
+
+- Import traces via internal API `POST /import`.
+- Optional persistence via CLI flag `--persist <file>` (load on start, save on shutdown).
+- UI polish: segmented toolbar, improved list/table styling, and layout primitives.
+
+## [0.1.4] - 2026-03-10
 
 ### Changed
 
 - UI polish: improved header layout, toolbar spacing, list row styling, sticky details header, and refined global styles.
 
-## [0.3.0] - 2026-03-10
+## [0.1.3] - 2026-03-10
 
 ### Changed
 
 - Replace dashboard polling with SSE live updates (`GET /events`).
 
-## [0.2.1] - 2026-03-10
+## [0.1.2] - 2026-03-10
 
 ### Added
 
 - Cap in-memory history to 500 requests (trims oldest entries).
 - Internal API endpoint `GET /export` to export the current trace as JSON.
 
-## [0.2.0] - 2026-03-10
+## [0.1.1] - 2026-03-10
 
 ### Added
 

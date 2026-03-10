@@ -115,7 +115,7 @@ export function RequestDetails(props: {
 
       <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Request</div>
+          <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Request</div>
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
           <div className="code">{headersToPretty(requestHeaders)}</div>
           <div style={{ height: 12 }} />
@@ -124,7 +124,7 @@ export function RequestDetails(props: {
         </div>
 
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Response</div>
+          <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Response</div>
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
           <div className="code">{headersToPretty(responseHeaders)}</div>
           <div style={{ height: 12 }} />

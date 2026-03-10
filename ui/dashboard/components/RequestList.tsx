@@ -16,20 +16,7 @@ export function RequestList(props: {
 }) {
   return (
     <div style={{ height: "calc(100vh - 64px)", overflow: "auto" }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "72px 1fr 72px 72px",
-          gap: 8,
-          padding: "10px 12px",
-          color: "var(--muted)",
-          fontSize: 12,
-          borderBottom: "1px solid var(--border)",
-          position: "sticky",
-          top: 0,
-          background: "var(--panel)"
-        }}
-      >
+      <div className="listHeader">
         <div>METHOD</div>
         <div>PATH</div>
         <div style={{ textAlign: "right" }}>STATUS</div>
@@ -44,26 +31,17 @@ export function RequestList(props: {
             onClick={() => props.onSelect(r.id)}
             className={`listItemButton ${active ? "listItemButton--active" : ""}`}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "72px 1fr 72px 72px",
-                gap: 8,
-                padding: "10px 12px",
-                borderBottom: "1px solid rgba(30,42,58,0.6)",
-                alignItems: "center"
-              }}
-            >
-              <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: "var(--text)" }}>
+            <div className="listRow">
+              <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
                 {r.method}
               </div>
-              <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: "var(--text)" }}>
+              <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
                 {r.path}
               </div>
-              <div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace", color: statusColor(r.responseStatus) }}>
+              <div className="mono" style={{ textAlign: "right", color: statusColor(r.responseStatus) }}>
                 {r.responseStatus ?? "-"}
               </div>
-              <div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace", color: "var(--muted)" }}>
+              <div className="mono" style={{ textAlign: "right", color: "var(--muted)" }}>
                 {typeof r.duration === "number" ? `${r.duration}ms` : "-"}
               </div>
             </div>

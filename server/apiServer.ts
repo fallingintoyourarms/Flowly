@@ -64,6 +64,13 @@ export function startApiServer(opts: ApiServerOptions) {
     res.json(memoryStore.all());
   });
 
+  app.post("/import", (req, res) => {
+    const body = req.body;
+    if (!Array.isArray(body)) return res.status(400).json({ error: "Expected an array" });
+    memoryStore.replaceAll(body as CapturedRequest[]);
+    res.json({ ok: true, count: body.length });
+  });
+
   app.get("/requests/:id", (req, res) => {
     const item = memoryStore.get(req.params.id);
     if (!item) return res.status(404).json({ error: "Not found" });

@@ -45,6 +45,34 @@ class MemoryStore {
     this.emit({ type: "cleared" });
   }
 
+  replaceAll(requests: CapturedRequest[]): void {
+    this.requests.clear();
+    this.order.length = 0;
+
+    for (const r of requests) {
+      this.requests.set(r.id, r);
+      this.order.push(r.id);
+    }
+
+    // Keep newest first, and enforce cap.
+    this.order.sort((a, b) => {
+      const ra = this.requests.get(a);
+      const rb = this.requests.get(b);
+      return (rb?.timestamp ?? 0) - (ra?.timestamp ?? 0);
+    });
+
+    while (this.order.length > this.max) {
+      const oldestId = this.order.pop();
+      if (oldestId) this.requests.delete(oldestId);
+    }
+
+    this.emit({ type: "cleared" });
+    for (const id of this.order) {
+      const r = this.requests.get(id);
+      if (r) this.emit({ type: "request_added", request: r });
+    }
+  }
+
   /**
    * Stores a newly captured request.
    *

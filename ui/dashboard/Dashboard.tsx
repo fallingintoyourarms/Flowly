@@ -78,9 +78,22 @@ export function Dashboard() {
 
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
+  const fileRef = React.useRef<HTMLInputElement | null >(null);
+
+  const importTraceFromFile = async (file: File) => { 
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+
+    await fetch("/api/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(parsed)
+    });
+  };
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "460px 1fr", height: "100vh" }}>
-      <div style={{ borderRight: "1px solid var(--border)", background: "var(--panel)" }}>
+    <div className="appShell">
+      <div className="sidePanel">
         <div className="panelHeader">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div>
@@ -92,29 +105,44 @@ export function Dashboard() {
               <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
             </div>
             <div className="toolbar">
-              <label
-                style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--muted)", fontSize: 12 }}
-              >
-                <input
-                  type="checkbox"
-                  checked={paused}
-                  onChange={(e) => void togglePaused(e.target.checked)}
-                />
-                Pause
-              </label>
-              <button className="button" onClick={() => void clearAll()}>
-                Clear
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importTraceFromFile(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+
+              <button className="button" onClick={() => fileRef.current?.click()}>
+                Import JSON
               </button>
-              <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
-                Send test request
-              </button>
+              <div className="toolbarGroup">
+                <label style={{ color: "var(--muted)", fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={paused}
+                    onChange={(e) => void togglePaused(e.target.checked)}
+                  />
+                  Pause
+                </label>
+                <button className="button" onClick={() => void clearAll()}>
+                  Clear
+                </button>
+                <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
+                  Send test request
+                </button>
+              </div>
             </div>
           </div>
         </div>
         <RequestList items={items} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
 
-      <div style={{ background: "var(--bg)" }}>
+      <div className="mainPanel">
         <RequestDetails request={selected} onReplayed={() => void 0} />
       </div>
     </div>

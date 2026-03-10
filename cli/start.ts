@@ -78,13 +78,13 @@ if (cmd !== "start") {
 }
 
 startProxyServer({
-  port: argv.port,
-  target: argv.target,
+  port: Number(argv.port),
+  target: String(argv.target),
   ignoreHeaders,
   ignorePaths,
   maxBodyBytes
 });
-startApiServer({ port: argv.apiPort });
+startApiServer({ port: Number(argv.apiPort) });
 
 const persistPath = argv.persist ? String(argv.persist) : null;
 

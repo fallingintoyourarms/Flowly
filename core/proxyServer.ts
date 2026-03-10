@@ -90,7 +90,7 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     selfHandleResponse: true
   });
 
-  proxy.on("error", (_err, _req, res) => {
+  proxy.on("error", (_err: Error, _req: http.IncomingMessage, res: http.ServerResponse) => {
     const r = res as ServerResponse;
     if (r.headersSent) return;
     r.writeHead(502, { "content-type": "application/json" });
@@ -104,12 +104,12 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
    * response back. We read the response stream ourselves so we can store it,
    * then write it to the client unchanged.
    */
-  proxy.on("proxyRes", (proxyRes, req, res) => {
+  proxy.on("proxyRes", (proxyRes: http.IncomingMessage, req: http.IncomingMessage, res: http.ServerResponse) => {
     const startedAt = (req as any).__flowlyStartedAt as number | undefined;
     const requestId = (req as any).__flowlyRequestId as string | undefined;
 
     const chunks: Buffer[] = [];
-    proxyRes.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    proxyRes.on("data", (c: Buffer) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
     proxyRes.on("end", () => {
       const rawBody = Buffer.concat(chunks);
       const capturedBody = maybeTruncateUtf8(decompressForCapture(proxyRes, rawBody), opts.maxBodyBytes);
@@ -152,7 +152,7 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     (req as any).__flowlyStartedAt = startedAt;
     (req as any).__flowlyRequestId = captured.id;
 
-    proxy.once("proxyReq", (proxyReq) => {
+    proxy.once("proxyReq", (proxyReq: http.ClientRequest) => {
       if (body) {
         proxyReq.setHeader("content-length", Buffer.byteLength(body));
         proxyReq.write(body);
@@ -170,7 +170,7 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     
     if (!isWS) {
       // Pass through non-WS upgrades
-      proxy.ws(req, socket, head, { target: opts.target });
+      proxy.ws(req, socket as any, head, { target: opts.target });
       return;
     }
 
@@ -184,14 +184,14 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     wsConnections.set(captured.id, { frames: [] });
 
     // Create WebSocket proxy
-    proxy.ws(req, socket, head, { target: opts.target }, (err, targetSocket) => {
+    proxy.ws(req, socket as any, head, { target: opts.target }, (err: Error | null, targetSocket?: any) => {
       if (err) {
         socket.destroy();
         return;
       }
 
       // Capture frames from client to server
-      socket.on("data", (data) => {
+      socket.on("data", (data: Buffer) => {
         const frame: WebSocketFrame = {
           type: "text",
           direction: "client",
@@ -206,7 +206,7 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
       });
 
       // Capture frames from server to client
-      targetSocket?.on("data", (data) => {
+      targetSocket?.on("data", (data: Buffer) => {
         const frame: WebSocketFrame = {
           type: "text",
           direction: "server",

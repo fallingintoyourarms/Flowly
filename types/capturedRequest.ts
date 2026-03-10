@@ -1,3 +1,10 @@
+export interface WebSocketFrame {
+  type: "text" | "binary" | "ping" | "pong" | "close";
+  direction: "client" | "server";
+  data?: string;
+  timestamp: number;
+}
+
 export interface CapturedRequest {
   id: string;
   method: string;
@@ -12,4 +19,6 @@ export interface CapturedRequest {
   responseBody?: string;
   duration?: number;
   targetUrl?: string;
+  isWebSocket?: boolean;
+  wsFrames?: WebSocketFrame[];
 }

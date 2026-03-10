@@ -132,5 +132,63 @@ export function startApiServer(opts: ApiServerOptions) {
     res.json(replayed);
   });
 
+  app.post("/replay/:id/modify", async (req, res) => {
+    const item = memoryStore.get(req.params.id);
+    if (!item || !item.targetUrl) return res.status(404).json({ error: "Not found" });
+
+    const { headers: modifiedHeaders, body: modifiedBody, method: modifiedMethod } = req.body || {};
+
+    const url = item.targetUrl;
+    const method = modifiedMethod || item.method;
+
+    const headers: Record<string, string> = { ...item.headers };
+    delete headers["host"];
+    delete headers["content-length"];
+
+    // Apply modifications
+    if (modifiedHeaders && typeof modifiedHeaders === "object") {
+      for (const [key, value] of Object.entries(modifiedHeaders)) {
+        if (value === null || value === undefined) {
+          delete headers[key.toLowerCase()];
+        } else {
+          headers[key] = String(value);
+        }
+      }
+    }
+
+    const body = modifiedBody !== undefined ? modifiedBody : item.body;
+
+    let response: Response;
+    let text: string;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body
+      });
+      text = await response.text();
+    } catch {
+      return res.status(502).json({ error: "Replay failed (target unreachable)" });
+    }
+
+    const replayed: CapturedRequest = {
+      ...item,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      method,
+      headers,
+      rawHeaders: headers,
+      body,
+      responseStatus: response.status,
+      responseHeaders: Object.fromEntries(response.headers.entries()),
+      responseBody: text,
+      duration: undefined
+    };
+
+    memoryStore.add(replayed);
+
+    res.json(replayed);
+  });
+
   return app.listen(opts.port, "127.0.0.1");
 }

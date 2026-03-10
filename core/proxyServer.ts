@@ -5,6 +5,7 @@ import httpProxy from "http-proxy";
 import { memoryStore } from "../storage/memoryStore";
 import { captureRequest } from "./requestCapture";
 import { captureResponse } from "./responseCapture";
+import type { WebSocketFrame } from "../types/capturedRequest";
 
 export interface ProxyServerOptions {
   port: number;
@@ -13,6 +14,9 @@ export interface ProxyServerOptions {
   ignorePaths?: string[];
   maxBodyBytes?: number;
 }
+
+// Track WebSocket connections for frame capture
+const wsConnections = new Map<string, { frames: WebSocketFrame[] }>();
 
 function shouldIgnorePath(path: string, ignorePaths: string[] | undefined): boolean {
   if (!ignorePaths || ignorePaths.length === 0) return false;
@@ -157,6 +161,73 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     });
 
     proxy.web(req, res, { target: opts.target });
+  });
+
+  // Handle WebSocket upgrade
+  server.on("upgrade", (req, socket, head) => {
+    const targetUrl = new URL(req.url ?? "/", opts.target);
+    const isWS = targetUrl.protocol === "ws:" || targetUrl.protocol === "wss:" || opts.target.startsWith("ws");
+    
+    if (!isWS) {
+      // Pass through non-WS upgrades
+      proxy.ws(req, socket, head, { target: opts.target });
+      return;
+    }
+
+    const captured = captureRequest(req, undefined, targetUrl.toString());
+    captured.isWebSocket = true;
+    captured.headers = stripHeaders(captured.headers, opts.ignoreHeaders) ?? {};
+    captured.rawHeaders = stripHeaders(captured.rawHeaders, opts.ignoreHeaders);
+    memoryStore.add(captured);
+
+    // Store for frame tracking
+    wsConnections.set(captured.id, { frames: [] });
+
+    // Create WebSocket proxy
+    proxy.ws(req, socket, head, { target: opts.target }, (err, targetSocket) => {
+      if (err) {
+        socket.destroy();
+        return;
+      }
+
+      // Capture frames from client to server
+      socket.on("data", (data) => {
+        const frame: WebSocketFrame = {
+          type: "text",
+          direction: "client",
+          data: data.toString("utf8"),
+          timestamp: Date.now()
+        };
+        const conn = wsConnections.get(captured.id);
+        if (conn) {
+          conn.frames.push(frame);
+          memoryStore.update(captured.id, { wsFrames: conn.frames });
+        }
+      });
+
+      // Capture frames from server to client
+      targetSocket?.on("data", (data) => {
+        const frame: WebSocketFrame = {
+          type: "text",
+          direction: "server",
+          data: data.toString("utf8"),
+          timestamp: Date.now()
+        };
+        const conn = wsConnections.get(captured.id);
+        if (conn) {
+          conn.frames.push(frame);
+          memoryStore.update(captured.id, { wsFrames: conn.frames });
+        }
+      });
+
+      // Clean up on close
+      socket.on("close", () => {
+        wsConnections.delete(captured.id);
+      });
+      targetSocket?.on("close", () => {
+        wsConnections.delete(captured.id);
+      });
+    });
   });
 
   server.listen(opts.port, "127.0.0.1");

@@ -52,10 +52,48 @@ export function RequestDetails(props: {
 }) {
   const r = props.request;
   const [revealSensitive, setRevealSensitive] = React.useState(false);
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editHeaders, setEditHeaders] = React.useState("");
+  const [editBody, setEditBody] = React.useState("");
+  const [editMethod, setEditMethod] = React.useState("");
+
+  React.useEffect(() => {
+    if (r) {
+      const headers = revealSensitive ? r.rawHeaders ?? r.headers : r.headers;
+      setEditHeaders(JSON.stringify(headers, null, 2));
+      setEditBody(r.body || "");
+      setEditMethod(r.method);
+    }
+  }, [r, revealSensitive]);
 
   const replay = async () => {
     if (!r) return;
     await fetch(`/api/replay/${r.id}`, { method: "POST" });
+    props.onReplayed();
+  };
+
+  const replayModified = async () => {
+    if (!r) return;
+    
+    let parsedHeaders: Record<string, string> = {};
+    try {
+      parsedHeaders = JSON.parse(editHeaders);
+    } catch {
+      alert("Invalid JSON in headers");
+      return;
+    }
+
+    await fetch(`/api/replay/${r.id}/modify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        headers: parsedHeaders,
+        body: editBody,
+        method: editMethod
+      })
+    });
+    
+    setIsEditing(false);
     props.onReplayed();
   };
 
@@ -108,7 +146,17 @@ export function RequestDetails(props: {
               Reveal sensitive values
             </label>
             <button className="button" onClick={copyCurl}>Copy as cURL</button>
-            <button className="button" onClick={replay}>Replay Request</button>
+            {!isEditing ? (
+              <>
+                <button className="button" onClick={replay}>Replay Request</button>
+                <button className="button" onClick={() => setIsEditing(true)}>Edit & Replay</button>
+              </>
+            ) : (
+              <>
+                <button className="button" onClick={replayModified}>Replay Modified</button>
+                <button className="button" onClick={() => setIsEditing(false)}>Cancel</button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -116,20 +164,119 @@ export function RequestDetails(props: {
       <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div>
           <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Request</div>
+          
+          {isEditing && (
+            <>
+              <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Method</div>
+              <select 
+                value={editMethod} 
+                onChange={(e) => setEditMethod(e.target.value)}
+                style={{ 
+                  background: "var(--panel2)", 
+                  color: "var(--text)", 
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "6px 10px",
+                  marginBottom: 12,
+                  width: "100%"
+                }}
+              >
+                {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </>
+          )}
+          
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
-          <div className="code">{headersToPretty(requestHeaders)}</div>
+          {isEditing ? (
+            <textarea
+              value={editHeaders}
+              onChange={(e) => setEditHeaders(e.target.value)}
+              style={{
+                width: "100%",
+                minHeight: 150,
+                background: "var(--panel2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 10,
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 12,
+                resize: "vertical"
+              }}
+            />
+          ) : (
+            <div className="code">{headersToPretty(requestHeaders)}</div>
+          )}
+          
           <div style={{ height: 12 }} />
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Body</div>
-          <div className="code">{formatMaybeJson(r.body) || "(empty)"}</div>
+          {isEditing ? (
+            <textarea
+              value={editBody}
+              onChange={(e) => setEditBody(e.target.value)}
+              style={{
+                width: "100%",
+                minHeight: 150,
+                background: "var(--panel2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 10,
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 12,
+                resize: "vertical"
+              }}
+            />
+          ) : (
+            <div className="code">{formatMaybeJson(r.body) || "(empty)"}</div>
+          )}
         </div>
 
         <div>
           <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Response</div>
-          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
-          <div className="code">{headersToPretty(responseHeaders)}</div>
-          <div style={{ height: 12 }} />
-          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Body</div>
-          <div className="code">{formatMaybeJson(r.responseBody) || "(empty)"}</div>
+          {r.isWebSocket ? (
+            <>
+              <div className="badge" style={{ marginBottom: 10 }}>WebSocket</div>
+              <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Frames</div>
+              <div style={{ maxHeight: 300, overflow: "auto" }}>
+                {(r.wsFrames || []).length === 0 ? (
+                  <div style={{ color: "var(--muted)" }}>No frames captured yet...</div>
+                ) : (
+                  (r.wsFrames || []).map((frame, i) => (
+                    <div 
+                      key={i}
+                      style={{
+                        padding: "8px 10px",
+                        marginBottom: 6,
+                        borderRadius: 6,
+                        background: frame.direction === "client" ? "rgba(96,165,250,0.1)" : "rgba(45,212,191,0.1)",
+                        borderLeft: `3px solid ${frame.direction === "client" ? "var(--blue)" : "var(--green)"}`,
+                        fontSize: 12
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontSize: 10 }}>
+                        <span>{frame.direction === "client" ? "→ Server" : "← Server"}</span>
+                        <span>{new Date(frame.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                      <div style={{ fontFamily: "ui-monospace, monospace", marginTop: 4, wordBreak: "break-word" }}>
+                        {frame.data || "(binary)"}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
+              <div className="code">{headersToPretty(responseHeaders)}</div>
+              <div style={{ height: 12 }} />
+              <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Body</div>
+              <div className="code">{formatMaybeJson(r.responseBody) || "(empty)"}</div>
+            </>
+          )}
         </div>
       </div>
     </div>

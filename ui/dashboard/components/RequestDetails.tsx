@@ -22,11 +22,36 @@ function headersToPretty(headers?: Record<string, string>): string {
   return JSON.stringify(sorted, null, 2);
 }
 
+function shellEscapeSingleQuotes(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function toCurl(req: CapturedRequest, revealSensitive: boolean): string {
+  const url = req.targetUrl ?? req.path;
+  const headers = revealSensitive ? req.rawHeaders ?? req.headers : req.headers;
+
+  const parts: string[] = [];
+  parts.push("curl");
+  parts.push("-X", req.method);
+
+  for (const [k, v] of Object.entries(headers)) {
+    parts.push("-H", shellEscapeSingleQuotes(`${k}: ${v}`));
+  }
+
+  if (req.body && req.body.length > 0) {
+    parts.push("--data-raw", shellEscapeSingleQuotes(req.body));
+  }
+
+  parts.push(shellEscapeSingleQuotes(url));
+  return parts.join(" ");
+}
+
 export function RequestDetails(props: {
   request: CapturedRequest | null;
   onReplayed: () => void;
 }) {
   const r = props.request;
+  const [revealSensitive, setRevealSensitive] = React.useState(false);
 
   const replay = async () => {
     if (!r) return;
@@ -37,6 +62,14 @@ export function RequestDetails(props: {
   if (!r) {
     return <div style={{ padding: 18, color: "var(--muted)" }}>No request selected</div>;
   }
+
+  const requestHeaders = revealSensitive ? r.rawHeaders ?? r.headers : r.headers;
+  const responseHeaders = revealSensitive ? r.rawResponseHeaders ?? r.responseHeaders : r.responseHeaders;
+
+  const copyCurl = async () => {
+    const text = toCurl(r, revealSensitive);
+    await navigator.clipboard.writeText(text);
+  };
 
   return (
     <div style={{ height: "100vh", overflow: "auto" }}>
@@ -56,7 +89,18 @@ export function RequestDetails(props: {
               </span>
             </div>
           </div>
-          <button className="button" onClick={replay}>Replay Request</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--muted)", fontSize: 12 }}>
+              <input
+                type="checkbox"
+                checked={revealSensitive}
+                onChange={(e) => setRevealSensitive(e.target.checked)}
+              />
+              Reveal sensitive values
+            </label>
+            <button className="button" onClick={copyCurl}>Copy as cURL</button>
+            <button className="button" onClick={replay}>Replay Request</button>
+          </div>
         </div>
       </div>
 
@@ -64,7 +108,7 @@ export function RequestDetails(props: {
         <div>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Request</div>
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
-          <div className="code">{headersToPretty(r.headers)}</div>
+          <div className="code">{headersToPretty(requestHeaders)}</div>
           <div style={{ height: 12 }} />
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Body</div>
           <div className="code">{formatMaybeJson(r.body) || "(empty)"}</div>
@@ -73,7 +117,7 @@ export function RequestDetails(props: {
         <div>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Response</div>
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Headers</div>
-          <div className="code">{headersToPretty(r.responseHeaders)}</div>
+          <div className="code">{headersToPretty(responseHeaders)}</div>
           <div style={{ height: 12 }} />
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Body</div>
           <div className="code">{formatMaybeJson(r.responseBody) || "(empty)"}</div>

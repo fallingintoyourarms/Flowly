@@ -2,11 +2,22 @@ import { nanoid } from "nanoid";
 import type { IncomingMessage } from "node:http";
 import type { CapturedRequest } from "../types/capturedRequest";
 
+const SENSITIVE_HEADERS = new Set(["authorization", "cookie", "set-cookie", "x-api-key"]);
+const MASKED_VALUE = "***";
+
 function normalizeHeaders(headers: IncomingMessage["headers"]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
     if (typeof value === "string") out[key] = value;
     else if (Array.isArray(value)) out[key] = value.join(", ");
+  }
+  return out;
+}
+
+function maskHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    out[key] = SENSITIVE_HEADERS.has(key.toLowerCase()) ? MASKED_VALUE : value;
   }
   return out;
 }
@@ -24,11 +35,13 @@ export function captureRequest(
   body: string | undefined,
   targetUrl: string
 ): CapturedRequest {
+  const rawHeaders = normalizeHeaders(req.headers);
   return {
     id: nanoid(),
     method: req.method ?? "GET",
     path: req.url ?? "/",
-    headers: normalizeHeaders(req.headers),
+    headers: maskHeaders(rawHeaders),
+    rawHeaders,
     body,
     timestamp: Date.now(),
     targetUrl

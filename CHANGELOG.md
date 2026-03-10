@@ -15,3 +15,10 @@ The format is based on Keep a Changelog.
 - Dashboard UI (request list + request/response details)
 - Request replay endpoint and UI button
 - CLI command `flowly start` with `--target`, `--port`, `--apiPort`
+- Dashboard button to send a sample request through the proxy for quick UI testing.
+
+### Changed
+
+- Mask sensitive headers by default (`authorization`, `cookie`, `set-cookie`, `x-api-key`) with a dashboard toggle to reveal.
+- Add "Copy as cURL" from the request details pane.
+- Fix dev script to invoke `flowly start` so `--apiPort` is correctly applied.

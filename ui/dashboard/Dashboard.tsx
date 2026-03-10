@@ -8,6 +8,18 @@ async function fetchRequests(): Promise<CapturedRequest[]> {
   return res.json();
 }
 
+async function sendTestRequestThroughProxy(): Promise<void> {
+  // The UI runs on :5173, so requests to :9090 are cross-origin.
+  await fetch("http://127.0.0.1:9090/flowly/test", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "dev-test-key"
+    },
+    body: JSON.stringify({ source: "flowly-dashboard", ts: Date.now() })
+  });
+}
+
 export function Dashboard() {
   const [items, setItems] = React.useState<CapturedRequest[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -36,8 +48,15 @@ export function Dashboard() {
     <div style={{ display: "grid", gridTemplateColumns: "460px 1fr", height: "100vh" }}>
       <div style={{ borderRight: "1px solid var(--border)", background: "var(--panel)" }}>
         <div style={{ padding: 14, borderBottom: "1px solid var(--border)" }}>
-          <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
-          <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
+              <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
+            </div>
+            <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
+              Send test request
+            </button>
+          </div>
         </div>
         <RequestList items={items} selectedId={selectedId} onSelect={setSelectedId} />
       </div>

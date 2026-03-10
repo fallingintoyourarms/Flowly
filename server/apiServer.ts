@@ -36,13 +36,18 @@ export function startApiServer(opts: ApiServerOptions) {
     delete headers["host"];
     delete headers["content-length"];
 
-    const response = await fetch(url, {
-      method: item.method,
-      headers,
-      body: item.body
-    });
-
-    const text = await response.text();
+    let response: Response;
+    let text: string;
+    try {
+      response = await fetch(url, {
+        method: item.method,
+        headers,
+        body: item.body
+      });
+      text = await response.text();
+    } catch {
+      return res.status(502).json({ error: "Replay failed (target unreachable)" });
+    }
 
     const replayed: CapturedRequest = {
       ...item,

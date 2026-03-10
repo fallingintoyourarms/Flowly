@@ -16,6 +16,7 @@ export function Dashboard() {
   const [items, setItems] = React.useState<CapturedRequest[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [paused, setPaused] = React.useState(false);
+  const [live, setLive] = React.useState(false);
 
   const togglePaused = async (next: boolean) => {
     setPaused(next);
@@ -33,18 +34,45 @@ export function Dashboard() {
   React.useEffect(() => {
     let alive = true;
 
-    const tick = async () => {
+    const init = async () => {
       const data = await fetchRequests();
       if (!alive) return;
       setItems(data);
       if (!selectedId && data[0]) setSelectedId(data[0].id);
     };
 
-    tick();
-    const t = window.setInterval(tick, 750);
+    init();
+
+    const es = new EventSource("/api/events");
+
+    es.addEventListener("open", () => setLive(true));
+    es.addEventListener("error", () => setLive(false));
+
+    es.addEventListener("request_added", (e) => {
+      const msg = JSON.parse((e as MessageEvent).data);
+      const req = msg.request as CapturedRequest;
+      setItems((prev) => [req, ...prev]);
+      setSelectedId((prevSel) => prevSel ?? req.id);
+    });
+
+    es.addEventListener("request_updated", (e) => {
+      const msg = JSON.parse((e as MessageEvent).data) as { id: string; patch: Partial<CapturedRequest> };
+      setItems((prev) => prev.map((r) => (r.id === msg.id ? { ...r, ...msg.patch } : r)));
+    });
+
+    es.addEventListener("cleared", () => {
+      setItems([]);
+      setSelectedId(null);
+    });
+
+    es.addEventListener("paused", (e) => {
+      const msg = JSON.parse((e as MessageEvent).data) as { paused: boolean };
+      setPaused(Boolean(msg.paused));
+    });
+
     return () => {
       alive = false;
-      window.clearInterval(t);
+      es.close();
     };
   }, [selectedId]);
 
@@ -53,13 +81,17 @@ export function Dashboard() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "460px 1fr", height: "100vh" }}>
       <div style={{ borderRight: "1px solid var(--border)", background: "var(--panel)" }}>
-        <div style={{ padding: 14, borderBottom: "1px solid var(--border)" }}>
+        <div className="panelHeader">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
+              <div className="titleRow">
+                <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
+                <span className={`badge ${live ? "badge--ok" : "badge--warn"}`}>{live ? "live" : "offline"}</span>
+                <span className="badge">{items.length}</span>
+              </div>
               <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="toolbar">
               <label
                 style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--muted)", fontSize: 12 }}
               >

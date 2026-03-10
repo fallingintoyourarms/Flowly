@@ -1,5 +1,11 @@
 import type { CapturedRequest } from "../types/capturedRequest";
 
+type StoreEvent =
+  | { type: "request_added"; request: CapturedRequest }
+  | { type: "request_updated"; id: string; patch: Partial<CapturedRequest> }
+  | { type: "cleared" }
+  | { type: "paused"; paused: boolean };
+
 /**
  * Simple in-memory store for captured requests.
  *
@@ -11,10 +17,22 @@ import type { CapturedRequest } from "../types/capturedRequest";
 class MemoryStore {
   private readonly requests = new Map<string, CapturedRequest>();
   private readonly order: string[] = [];
+  private readonly max = 500;
   private paused = false;
+  private listeners = new Set<(evt: StoreEvent) => void>();
+
+  subscribe(listener: (evt: StoreEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private emit(evt: StoreEvent): void {
+    for (const l of this.listeners) l(evt);
+  }
 
   setPaused(paused: boolean): void { 
     this.paused = paused;
+    this.emit({ type: "paused", paused });
   }
 
   isPaused(): boolean { 
@@ -24,6 +42,7 @@ class MemoryStore {
   clear(): void {
     this.requests.clear();
     this.order.length = 0;
+    this.emit({ type: "cleared" });
   }
 
   /**
@@ -35,6 +54,12 @@ class MemoryStore {
     if (this.paused) return;
     this.requests.set(req.id, req);
     this.order.unshift(req.id);
+    this.emit({ type: "request_added", request: req });
+
+    while (this.order.length > this.max) {
+      const oldestId = this.order.pop();
+      if (oldestId) this.requests.delete(oldestId);
+    }
   }
 
   /**
@@ -47,6 +72,7 @@ class MemoryStore {
     const existing = this.requests.get(id);
     if (!existing) return;
     this.requests.set(id, { ...existing, ...patch });
+    this.emit({ type: "request_updated", id, patch });
   }
 
   /**

@@ -36,6 +36,34 @@ export function startApiServer(opts: ApiServerOptions) {
     res.json(memoryStore.all());
   });
 
+  app.get("/events", (req, res) => {
+    res.setHeader("content-type", "text/event-stream");
+    res.setHeader("cache-control", "no-cache");
+    res.setHeader("connection", "keep-alive");
+
+    (res as any).flushHeaders?.();
+
+    const send = (event: string, data: unknown) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    send("hello", { ok: true });
+
+    const unsubscribe = memoryStore.subscribe((evt) => {
+      send(evt.type, evt);
+    });
+
+    req.on("close", () => {
+      unsubscribe();
+      res.end();
+    });
+  });
+
+  app.get("/export", (_req, res) => {
+    res.json(memoryStore.all());
+  });
+
   app.get("/requests/:id", (req, res) => {
     const item = memoryStore.get(req.params.id);
     if (!item) return res.status(404).json({ error: "Not found" });

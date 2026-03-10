@@ -42,15 +42,7 @@ export function RequestList(props: {
           <button
             key={r.id}
             onClick={() => props.onSelect(r.id)}
-            style={{
-              width: "100%",
-              textAlign: "left",
-              border: "none",
-              background: active ? "#0c121a" : "transparent",
-              color: "inherit",
-              cursor: "pointer",
-              padding: 0
-            }}
+            className={`listItemButton ${active ? "listItemButton--active" : ""}`}
           >
             <div
               style={{

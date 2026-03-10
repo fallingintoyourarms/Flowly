@@ -73,7 +73,16 @@ export function RequestDetails(props: {
 
   return (
     <div style={{ height: "100vh", overflow: "auto" }}>
-      <div style={{ padding: 16, borderBottom: "1px solid var(--border)", background: "var(--panel)" }}>
+      <div
+        style={{
+          padding: 16,
+          borderBottom: "1px solid var(--border)",
+          background: "var(--panel)",
+          position: "sticky",
+          top: 0,
+          zIndex: 5
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <div>
             <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }}>
@@ -89,7 +98,7 @@ export function RequestDetails(props: {
               </span>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="toolbar">
             <label style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--muted)", fontSize: 12 }}>
               <input
                 type="checkbox"

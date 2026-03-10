@@ -5,10 +5,12 @@
   --text: #d9e2ef;
   --muted: #93a4b8;
   --border: #1e2a3a;
+  --border2: #2c3f57;
   --green: #2dd4bf;
   --red: #fb7185;
   --yellow: #fbbf24;
   --blue: #60a5fa;
+  --shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -22,6 +24,10 @@ html, body {
 }
 
 a { color: inherit; }
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: #182435; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }
 
 .code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -45,6 +51,9 @@ a { color: inherit; }
   font-size: 12px;
 }
 
+.badge--ok { color: var(--green); border-color: rgba(45, 212, 191, 0.25); background: rgba(45, 212, 191, 0.06); }
+.badge--warn { color: var(--yellow); border-color: rgba(251, 191, 36, 0.25); background: rgba(251, 191, 36, 0.06); }
+
 .button {
   background: var(--panel);
   color: var(--text);
@@ -52,6 +61,43 @@ a { color: inherit; }
   border-radius: 8px;
   padding: 8px 10px;
   cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
 }
 
-.button:hover { border-color: #2c3f57; }
+.button:hover { border-color: var(--border2); background: rgba(255,255,255,0.02); }
+.button:active { transform: translateY(1px); }
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.panelHeader {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0));
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.listItemButton {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.listItemButton:hover { background: rgba(255,255,255,0.02); }
+.listItemButton--active { background: rgba(96,165,250,0.08); }
+
+input[type="checkbox"] {
+  accent-color: var(--blue);
+}

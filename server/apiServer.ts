@@ -7,6 +7,22 @@ export interface ApiServerOptions {
   port: number;
 }
 
+async function sendTestRequest(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await fetch("http://127.0.0.1:9090/flowly/test", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "dev-test-key"
+      },
+      body: JSON.stringify({ source: "flowly-api", ts: Date.now() })
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to reach Flowly proxy on http://127.0.0.1:9090" };
+  }
+}
+
 /**
  * Internal API used by the dashboard UI.
  */
@@ -24,6 +40,23 @@ export function startApiServer(opts: ApiServerOptions) {
     const item = memoryStore.get(req.params.id);
     if (!item) return res.status(404).json({ error: "Not found" });
     res.json(item);
+  });
+
+  app.post("/pause", (req, res) => {
+    const paused = Boolean(req.body?.paused);
+    memoryStore.setPaused(paused);
+    res.json({ paused: memoryStore.isPaused() });
+  });
+
+  app.post("/clear", (_req, res) => {
+    memoryStore.clear();
+    res.json({ ok: true });
+  });
+
+  app.post("/send-test", async (_req, res) => {
+    const result = await sendTestRequest();
+    if (!result.ok) return res.status(502).json({ error: result.error });
+    res.json({ ok: true });
   });
 
   app.post("/replay/:id", async (req, res) => {

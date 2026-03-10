@@ -9,20 +9,26 @@ async function fetchRequests(): Promise<CapturedRequest[]> {
 }
 
 async function sendTestRequestThroughProxy(): Promise<void> {
-  // The UI runs on :5173, so requests to :9090 are cross-origin.
-  await fetch("http://127.0.0.1:9090/flowly/test", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": "dev-test-key"
-    },
-    body: JSON.stringify({ source: "flowly-dashboard", ts: Date.now() })
-  });
+  await fetch("/api/send-test", { method: "POST" });
 }
 
 export function Dashboard() {
   const [items, setItems] = React.useState<CapturedRequest[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [paused, setPaused] = React.useState(false);
+
+  const togglePaused = async (next: boolean) => {
+    setPaused(next);
+    await fetch("/api/pause", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ paused: next })
+    });
+  };
+
+  const clearAll = async () => {
+    await fetch("/api/clear", { method: "POST" });
+  };
 
   React.useEffect(() => {
     let alive = true;
@@ -53,9 +59,24 @@ export function Dashboard() {
               <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
               <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
             </div>
-            <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
-              Send test request
-            </button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <label
+                style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--muted)", fontSize: 12 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={paused}
+                  onChange={(e) => void togglePaused(e.target.checked)}
+                />
+                Pause
+              </label>
+              <button className="button" onClick={() => void clearAll()}>
+                Clear
+              </button>
+              <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
+                Send test request
+              </button>
+            </div>
           </div>
         </div>
         <RequestList items={items} selectedId={selectedId} onSelect={setSelectedId} />

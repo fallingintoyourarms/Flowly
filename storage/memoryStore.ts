@@ -11,6 +11,20 @@ import type { CapturedRequest } from "../types/capturedRequest";
 class MemoryStore {
   private readonly requests = new Map<string, CapturedRequest>();
   private readonly order: string[] = [];
+  private paused = false;
+
+  setPaused(paused: boolean): void { 
+    this.paused = paused;
+  }
+
+  isPaused(): boolean { 
+    return this.paused;
+  }
+  
+  clear(): void {
+    this.requests.clear();
+    this.order.length = 0;
+  }
 
   /**
    * Stores a newly captured request.
@@ -18,6 +32,7 @@ class MemoryStore {
    * @param req A partially or fully captured request object
    */
   add(req: CapturedRequest): void {
+    if (this.paused) return;
     this.requests.set(req.id, req);
     this.order.unshift(req.id);
   }

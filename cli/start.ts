@@ -7,8 +7,17 @@ import { startApiServer } from "../server/apiServer";
 import { memoryStore } from "../storage/memoryStore";
 import type { CapturedRequest } from "../types/capturedRequest";
 
+// Simple ANSI color helpers
+const c = {
+  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
+  cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  bold: (s: string) => `\x1b[1m${s}\x1b[0m`
+};
+
 const argv = await yargs(hideBin(process.argv))
-  .command("start", "Start Flowly", (y) =>
+  .command("start", "Start Flowly proxy and API server", (y) =>
     y
       .option("target", {
         type: "string",
@@ -27,22 +36,26 @@ const argv = await yargs(hideBin(process.argv))
       })
       .option("ignoreHeader", {
         type: "string",
-        describe: "Comma-separated list of header names to exclude from capture (e.g. authorization,cookie)"
+        describe: "Comma-separated list of header names to exclude from capture"
       })
       .option("ignorePath", {
         type: "string",
-        describe: "Comma-separated list of path prefixes to skip capture (e.g. /health,/metrics)"
+        describe: "Comma-separated list of path prefixes to skip capture"
       })
       .option("maxBody", {
         type: "number",
         default: 200000,
-        describe: "Max captured body size in bytes (truncate beyond this limit)"
+        describe: "Max captured body size in bytes"
       })
       .option("persist", {
         type: "string",
-        describe: "Persist captured requests to a JSON file (load on start, save on shutdown)"
+        describe: "Persist captured requests to a JSON file"
       })
   )
+  .command("version", "Show version", () => {
+    console.log("0.1.5");
+    process.exit(0);
+  })
   .help()
   .parse();
 
@@ -73,8 +86,9 @@ startProxyServer({
 });
 startApiServer({ port: argv.apiPort });
 
-if (argv.persist) {
-  const persistPath = argv.persist as string;
+const persistPath = argv.persist ? String(argv.persist) : null;
+
+if (persistPath) {
   try {
     if (fs.existsSync(persistPath)) {
       const raw = fs.readFileSync(persistPath, "utf8");
@@ -104,9 +118,15 @@ if (argv.persist) {
   process.on("exit", () => save());
 }
 
-// eslint-disable-next-line no-console
-console.log(`Flowly proxy listening on http://localhost:${argv.port} -> ${argv.target}`);
-// eslint-disable-next-line no-console
-console.log(`Flowly API listening on http://localhost:${argv.apiPort}`);
-// eslint-disable-next-line no-console
-console.log(`Dashboard dev server: http://localhost:5173`);
+console.log("");
+console.log(c.bold(c.cyan("    Flowly")) + c.dim("  Local API traffic debugger"));
+console.log("");
+console.log(c.dim("  Proxy:    ") + c.green(`http://localhost:${argv.port}`) + c.dim(` → ${argv.target}`));
+console.log(c.dim("  API:      ") + c.green(`http://localhost:${argv.apiPort}`));
+console.log(c.dim("  Capture:  ") + c.yellow(`${argv.maxBody?.toLocaleString() ?? 200000} bytes max`));
+if (persistPath) console.log(c.dim("  Persist:  ") + c.yellow(persistPath));
+if (ignoreHeaders.length) console.log(c.dim("  Ignore:   ") + c.yellow(ignoreHeaders.join(", ")));
+if (ignorePaths.length) console.log(c.dim("  Skip:     ") + c.yellow(ignorePaths.join(", ")));
+console.log("");
+console.log(c.dim("  Press Ctrl+C to stop"));
+console.log("");

@@ -47,6 +47,13 @@ async function fetchQuery(params: {
   return Array.isArray(json) ? json : (json.items ?? []);
 }
 
+function sumRecord(rec: Record<string, number> | undefined): number {
+  if (!rec) return 0;
+  let total = 0;
+  for (const v of Object.values(rec)) total += typeof v === "number" ? v : 0;
+  return total;
+}
+
 export function Dashboard() {
   const [items, setItems] = React.useState<CapturedRequest[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -296,6 +303,71 @@ export function Dashboard() {
             <span className="badge">5xx: {analytics ? analytics.statusCounts["5xx"] ?? 0 : "-"}</span>
             {hasActiveFilter && <span className="badge">filtered</span>}
           </div>
+
+          {analytics && (
+            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Status distribution (last {analytics.windowSec}s)</div>
+                {(() => {
+                  const total = sumRecord(analytics.statusCounts);
+                  const parts = [
+                    { key: "2xx", color: "var(--green)" },
+                    { key: "3xx", color: "var(--blue)" },
+                    { key: "4xx", color: "var(--yellow)" },
+                    { key: "5xx", color: "var(--red)" },
+                    { key: "other", color: "var(--muted)" }
+                  ] as const;
+
+                  return (
+                    <>
+                      <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
+                        {parts.map((p) => {
+                          const n = analytics.statusCounts[p.key] ?? 0;
+                          const pct = total > 0 ? (n / total) * 100 : 0;
+                          return (
+                            <div
+                              key={p.key}
+                              style={{ width: `${pct}%`, background: p.color }}
+                              title={`${p.key}: ${n}`}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        {parts.map((p) => (
+                          <span key={p.key} className="badge">
+                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, background: p.color, marginRight: 6, verticalAlign: "middle" }} />
+                            {p.key}: {analytics.statusCounts[p.key] ?? 0}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Latency histogram (ms)</div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 60 }}>
+                  {analytics.latencyHistogram.map((b, i) => {
+                    const max = Math.max(1, ...analytics.latencyHistogram.map((x) => x.count));
+                    const h = Math.round((b.count / max) * 60);
+                    const label = b.max === Infinity ? `${b.min}+` : `${b.min}-${b.max}`;
+                    return (
+                      <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${label}ms: ${b.count}`}>
+                        <div style={{ height: h, background: "rgba(96,165,250,0.5)", border: "1px solid rgba(96,165,250,0.7)", borderRadius: 6 }} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
+                  <span>fast</span>
+                  <span>slow</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <RequestList items={items} selectedId={selectedId} onSelect={setSelectedId} />
       </div>

@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.2.0]
+
+### Added
+
+- Traffic analytics endpoint `GET /analytics/overview` (RPS, average latency, status distribution, latency histogram).
+- Flexible request querying endpoint `GET /requests/query` (method/status range/keyword/regex filtering).
+- Export endpoints `GET /export.json` and `GET /export.csv` plus `POST /import.json` alias.
+- Dashboard filtering UI (method, status range, keyword, regex) wired to `/requests/query`.
+- Dashboard visualizations for status distribution and latency histogram (no extra chart deps).
+- Error highlighting for 4xx/5xx requests with heuristic “Analysis” hints in request details.
+- Replay job tracking metadata and UI badges (running/succeeded/failed, timestamp, error info).
+- Side-by-side compare mode by pinning two requests in the list.
+
+### Changed
+
+- Fix Node.js ESM runtime by adding explicit `.js` extensions to internal relative imports.
+- Improve WebSocket debugging by capturing and displaying WebSocket frames.
+
 ## [0.1.5] - 2026-03-10
 
 ### Added

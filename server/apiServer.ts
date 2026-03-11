@@ -32,8 +32,117 @@ export function startApiServer(opts: ApiServerOptions) {
   app.use(cors());
   app.use(express.json({ limit: "5mb" }));
 
+  app.get("/analytics/overview", (req, res) => {
+    const windowSecRaw = typeof req.query.windowSec === "string" ? Number(req.query.windowSec) : 30;
+    const windowSec = Number.isFinite(windowSecRaw) ? Math.max(5, Math.min(300, windowSecRaw)) : 30;
+    const windowMs = windowSec * 1000;
+
+    const now = Date.now();
+    const items = memoryStore.all();
+    const recent = items.filter((r) => now - r.timestamp <= windowMs);
+
+    const total = recent.length;
+    const rps = windowSec > 0 ? total / windowSec : 0;
+
+    let sum = 0;
+    let n = 0;
+    for (const r of recent) {
+      if (typeof r.duration === "number" && Number.isFinite(r.duration)) {
+        sum += r.duration;
+        n += 1;
+      }
+    }
+    const avgResponseMs = n > 0 ? sum / n : null;
+
+    const statusCounts: Record<string, number> = { "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, other: 0 };
+    for (const r of recent) {
+      const s = r.responseStatus;
+      if (typeof s !== "number") continue;
+      if (s >= 200 && s < 300) statusCounts["2xx"]++;
+      else if (s >= 300 && s < 400) statusCounts["3xx"]++;
+      else if (s >= 400 && s < 500) statusCounts["4xx"]++;
+      else if (s >= 500 && s < 600) statusCounts["5xx"]++;
+      else statusCounts.other++;
+    }
+
+    const buckets = [0, 25, 50, 100, 200, 400, 800, 1600];
+    const histogram = buckets.map((b, i) => {
+      const next = i === buckets.length - 1 ? Infinity : buckets[i + 1];
+      return { min: b, max: next, count: 0 };
+    });
+
+    for (const r of recent) {
+      const d = r.duration;
+      if (typeof d !== "number" || !Number.isFinite(d)) continue;
+      for (const bucket of histogram) {
+        if (d >= bucket.min && d < bucket.max) {
+          bucket.count++;
+          break;
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      windowSec,
+      total,
+      rps,
+      avgResponseMs,
+      statusCounts,
+      latencyHistogram: histogram
+    });
+  });
+
   app.get("/requests", (_req, res) => {
     res.json(memoryStore.all());
+  });
+
+  app.get("/requests/query", (req, res) => {
+    const method = typeof req.query.method === "string" ? req.query.method.toUpperCase() : undefined;
+    const statusMin = typeof req.query.statusMin === "string" ? Number(req.query.statusMin) : undefined;
+    const statusMax = typeof req.query.statusMax === "string" ? Number(req.query.statusMax) : undefined;
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const regex = typeof req.query.regex === "string" ? req.query.regex : undefined;
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(2000, limit!)) : 500;
+
+    let re: RegExp | undefined;
+    if (regex) {
+      if (regex.length > 200) return res.status(400).json({ error: "regex too long" });
+      try {
+        re = new RegExp(regex, "i");
+      } catch {
+        return res.status(400).json({ error: "invalid regex" });
+      }
+    }
+
+    const needle = q?.toLowerCase();
+
+    const out = memoryStore
+      .all()
+      .filter((r) => {
+        if (method && r.method.toUpperCase() !== method) return false;
+
+        const s = r.responseStatus;
+        if (typeof statusMin === "number" && Number.isFinite(statusMin) && typeof s === "number" && s < statusMin) return false;
+        if (typeof statusMax === "number" && Number.isFinite(statusMax) && typeof s === "number" && s > statusMax) return false;
+
+        if (needle) {
+          const hay = `${r.path}\n${r.body ?? ""}\n${r.responseBody ?? ""}`.toLowerCase();
+          if (!hay.includes(needle)) return false;
+        }
+
+        if (re) {
+          const hay = `${r.path}\n${r.body ?? ""}\n${r.responseBody ?? ""}`;
+          if (!re.test(hay)) return false;
+        }
+
+        return true;
+      })
+      .slice(0, safeLimit);
+
+    res.json({ ok: true, count: out.length, items: out });
   });
 
   app.get("/events", (req, res) => {

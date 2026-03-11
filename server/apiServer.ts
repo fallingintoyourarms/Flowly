@@ -3,6 +3,12 @@ import cors from "cors";
 import type { CapturedRequest } from "../types/capturedRequest.js";
 import { memoryStore } from "../storage/memoryStore.js";
 
+function csvEscape(value: unknown): string {
+  const s = value === null || value === undefined ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
 export interface ApiServerOptions {
   port: number;
 }
@@ -171,6 +177,53 @@ export function startApiServer(opts: ApiServerOptions) {
 
   app.get("/export", (_req, res) => {
     res.json(memoryStore.all());
+  });
+
+  app.get("/export.json", (_req, res) => {
+    res.json(memoryStore.all());
+  });
+
+  app.get("/export.csv", (_req, res) => {
+    const items = memoryStore.all();
+    const columns: Array<keyof CapturedRequest | "requestHeaders" | "responseHeaders"> = [
+      "id",
+      "timestamp",
+      "method",
+      "path",
+      "targetUrl",
+      "responseStatus",
+      "duration",
+      "isWebSocket",
+      "requestHeaders",
+      "body",
+      "responseHeaders",
+      "responseBody"
+    ];
+
+    const header = columns.join(",");
+    const lines = [header];
+
+    for (const r of items) {
+      const row = columns
+        .map((col) => {
+          if (col === "requestHeaders") return csvEscape(JSON.stringify(r.rawHeaders ?? r.headers ?? {}));
+          if (col === "responseHeaders") return csvEscape(JSON.stringify(r.rawResponseHeaders ?? r.responseHeaders ?? {}));
+          return csvEscape((r as any)[col]);
+        })
+        .join(",");
+      lines.push(row);
+    }
+
+    res.setHeader("content-type", "text/csv; charset=utf-8");
+    res.setHeader("content-disposition", "attachment; filename=flowly-export.csv");
+    res.send(lines.join("\n"));
+  });
+
+  app.post("/import.json", (req, res) => {
+    const body = req.body;
+    if (!Array.isArray(body)) return res.status(400).json({ error: "Expected an array" });
+    memoryStore.replaceAll(body as CapturedRequest[]);
+    res.json({ ok: true, count: body.length });
   });
 
   app.post("/import", (req, res) => {

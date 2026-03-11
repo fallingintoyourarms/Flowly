@@ -54,6 +54,133 @@ function sumRecord(rec: Record<string, number> | undefined): number {
   return total;
 }
 
+function useEventSource(on: {
+  onLive: (live: boolean) => void;
+  onRequestAdded: (req: CapturedRequest) => void;
+  onRequestUpdated: (id: string, patch: Partial<CapturedRequest>) => void;
+  onCleared: () => void;
+  onPaused: (paused: boolean) => void;
+}) {
+  React.useEffect(() => {
+    const es = new EventSource("/api/events");
+
+    const onOpen = () => on.onLive(true);
+    const onErr = () => on.onLive(false);
+
+    const onAdded = (e: Event) => {
+      const msg = JSON.parse((e as MessageEvent).data);
+      const req = msg.request as CapturedRequest;
+      on.onRequestAdded(req);
+    };
+
+    const onUpdated = (e: Event) => {
+      const msg = JSON.parse((e as MessageEvent).data) as { id: string; patch: Partial<CapturedRequest> };
+      on.onRequestUpdated(msg.id, msg.patch);
+    };
+
+    const onCleared = () => on.onCleared();
+
+    const onPaused = (e: Event) => {
+      const msg = JSON.parse((e as MessageEvent).data) as { paused: boolean };
+      on.onPaused(Boolean(msg.paused));
+    };
+
+    es.addEventListener("open", onOpen);
+    es.addEventListener("error", onErr);
+    es.addEventListener("request_added", onAdded);
+    es.addEventListener("request_updated", onUpdated);
+    es.addEventListener("cleared", onCleared);
+    es.addEventListener("paused", onPaused);
+
+    return () => {
+      es.close();
+    };
+  }, [on]);
+}
+
+function useInterval(callback: () => void, delayMs: number | null) {
+  const cbRef = React.useRef(callback);
+  cbRef.current = callback;
+
+  React.useEffect(() => {
+    if (delayMs === null) return;
+    const t = window.setInterval(() => cbRef.current(), delayMs);
+    return () => window.clearInterval(t);
+  }, [delayMs]);
+}
+
+function useDebouncedEffect(effect: () => void, delayMs: number, deps: React.DependencyList) {
+  React.useEffect(() => {
+    const t = window.setTimeout(effect, delayMs);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+function StatusDistribution(props: { analytics: AnalyticsOverview }) {
+  const { analytics } = props;
+  const total = React.useMemo(() => sumRecord(analytics.statusCounts), [analytics.statusCounts]);
+  const parts = React.useMemo(
+    () =>
+      [
+        { key: "2xx", color: "var(--green)" },
+        { key: "3xx", color: "var(--blue)" },
+        { key: "4xx", color: "var(--yellow)" },
+        { key: "5xx", color: "var(--red)" },
+        { key: "other", color: "var(--muted)" }
+      ] as const,
+    []
+  );
+
+  return (
+    <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Status distribution (last {analytics.windowSec}s)</div>
+      <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
+        {parts.map((p) => {
+          const n = analytics.statusCounts[p.key] ?? 0;
+          const pct = total > 0 ? (n / total) * 100 : 0;
+          return <div key={p.key} style={{ width: `${pct}%`, background: p.color }} title={`${p.key}: ${n}`} />;
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        {parts.map((p) => (
+          <span key={p.key} className="badge">
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, background: p.color, marginRight: 6, verticalAlign: "middle" }} />
+            {p.key}: {analytics.statusCounts[p.key] ?? 0}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LatencyHistogram(props: { analytics: AnalyticsOverview }) {
+  const { analytics } = props;
+  const max = React.useMemo(() => Math.max(1, ...analytics.latencyHistogram.map((x) => x.count)), [analytics.latencyHistogram]);
+
+  return (
+    <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Latency histogram (ms)</div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 60 }}>
+        {analytics.latencyHistogram.map((b, i) => {
+          const h = Math.round((b.count / max) * 60);
+          const label = b.max === Infinity ? `${b.min}+` : `${b.min}-${b.max}`;
+          return (
+            <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${label}ms: ${b.count}`}>
+              <div style={{ height: h, background: "rgba(96,165,250,0.5)", border: "1px solid rgba(96,165,250,0.7)", borderRadius: 6 }} />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
+        <span>fast</span>
+        <span>slow</span>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const [items, setItems] = React.useState<CapturedRequest[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -74,125 +201,86 @@ export function Dashboard() {
     filterMethod || filterStatusMin || filterStatusMax || filterQ || filterRegex
   );
 
-  const togglePaused = async (next: boolean) => {
+  const refreshRequests = React.useCallback(async () => {
+    const data = await fetchRequests();
+    setItems(data);
+    setSelectedId((prev) => prev ?? data[0]?.id ?? null);
+  }, []);
+
+  const refreshQuery = React.useCallback(async () => {
+    if (!hasActiveFilter) return;
+    const data = await fetchQuery({
+      method: filterMethod || undefined,
+      statusMin: filterStatusMin || undefined,
+      statusMax: filterStatusMax || undefined,
+      q: filterQ || undefined,
+      regex: filterRegex || undefined
+    });
+    setItems(data);
+    setSelectedId((prev) => prev ?? data[0]?.id ?? null);
+  }, [hasActiveFilter, filterMethod, filterStatusMin, filterStatusMax, filterQ, filterRegex]);
+
+  const refreshAnalytics = React.useCallback(async () => {
+    try {
+      const a = await fetchAnalytics();
+      setAnalytics(a);
+    } catch {
+      setAnalytics(null);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    refreshRequests();
+  }, [refreshRequests]);
+
+  useEventSource({
+    onLive: setLive,
+    onRequestAdded: (req) => {
+      setItems((prev) => [req, ...prev]);
+      setSelectedId((prevSel) => prevSel ?? req.id);
+    },
+    onRequestUpdated: (id, patch) => {
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    },
+    onCleared: () => {
+      setItems([]);
+      setSelectedId(null);
+    },
+    onPaused: setPaused
+  });
+
+  useInterval(refreshAnalytics, 1000);
+  useDebouncedEffect(() => {
+    if (hasActiveFilter) {
+      refreshQuery();
+    } else {
+      refreshRequests();
+    }
+  }, 150, [hasActiveFilter, refreshQuery, refreshRequests]);
+
+  const togglePaused = React.useCallback(async (next: boolean) => {
     setPaused(next);
     await fetch("/api/pause", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ paused: next })
     });
-  };
-
-  const clearAll = async () => {
-    await fetch("/api/clear", { method: "POST" });
-  };
-
-  React.useEffect(() => {
-    let alive = true;
-
-    const init = async () => {
-      const data = await fetchRequests();
-      if (!alive) return;
-      setItems(data);
-      if (!selectedId && data[0]) setSelectedId(data[0].id);
-    };
-
-    init();
-
-    const es = new EventSource("/api/events");
-
-    es.addEventListener("open", () => setLive(true));
-    es.addEventListener("error", () => setLive(false));
-
-    es.addEventListener("request_added", (e) => {
-      const msg = JSON.parse((e as MessageEvent).data);
-      const req = msg.request as CapturedRequest;
-      setItems((prev) => [req, ...prev]);
-      setSelectedId((prevSel) => prevSel ?? req.id);
-    });
-
-    es.addEventListener("request_updated", (e) => {
-      const msg = JSON.parse((e as MessageEvent).data) as { id: string; patch: Partial<CapturedRequest> };
-      setItems((prev) => prev.map((r) => (r.id === msg.id ? { ...r, ...msg.patch } : r)));
-    });
-
-    es.addEventListener("cleared", () => {
-      setItems([]);
-      setSelectedId(null);
-    });
-
-    es.addEventListener("paused", (e) => {
-      const msg = JSON.parse((e as MessageEvent).data) as { paused: boolean };
-      setPaused(Boolean(msg.paused));
-    });
-
-    return () => {
-      alive = false;
-      es.close();
-    };
-  }, [selectedId]);
-
-  React.useEffect(() => {
-    let alive = true;
-
-    const run = async () => {
-      try {
-        const a = await fetchAnalytics();
-        if (!alive) return;
-        setAnalytics(a);
-      } catch {
-        if (!alive) return;
-        setAnalytics(null);
-      }
-    };
-
-    run();
-    const t = window.setInterval(run, 1000);
-    return () => {
-      alive = false;
-      window.clearInterval(t);
-    };
   }, []);
 
-  React.useEffect(() => {
-    let alive = true;
+  const clearAll = React.useCallback(async () => {
+    await fetch("/api/clear", { method: "POST" });
+  }, []);
 
-    const run = async () => {
-      if (!hasActiveFilter) return;
-      try {
-        const data = await fetchQuery({
-          method: filterMethod || undefined,
-          statusMin: filterStatusMin || undefined,
-          statusMax: filterStatusMax || undefined,
-          q: filterQ || undefined,
-          regex: filterRegex || undefined
-        });
-        if (!alive) return;
-        setItems(data);
-        if (data[0]) setSelectedId((prev) => prev ?? data[0].id);
-      } catch {
-        // ignore
-      }
-    };
+  const selected = React.useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
+  const compareA = React.useMemo(() => items.find((i) => i.id === compareAId) ?? null, [items, compareAId]);
+  const compareB = React.useMemo(() => items.find((i) => i.id === compareBId) ?? null, [items, compareBId]);
 
-    const t = window.setTimeout(run, 150);
-    return () => {
-      alive = false;
-      window.clearTimeout(t);
-    };
-  }, [hasActiveFilter, filterMethod, filterStatusMin, filterStatusMax, filterQ, filterRegex]);
+  const pinnedIds = React.useMemo(() => new Set([compareAId, compareBId].filter(Boolean) as string[]), [compareAId, compareBId]);
+  const canPinMore = pinnedIds.size < 2;
 
-  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
 
-  const compareA = items.find((i) => i.id === compareAId) ?? null;
-  const compareB = items.find((i) => i.id === compareBId) ?? null;
-  const pinnedIds = new Set([compareAId, compareBId].filter(Boolean) as string[]);
-  const pinnedCount = pinnedIds.size;
-  const canPinMore = pinnedCount < 2;
-
-  const fileRef = React.useRef<HTMLInputElement | null >(null);
-
-  const importTraceFromFile = async (file: File) => { 
+  const importTraceFromFile = React.useCallback(async (file: File) => {
     const text = await file.text();
     const parsed = JSON.parse(text);
 
@@ -201,7 +289,38 @@ export function Dashboard() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(parsed)
     });
-  };
+  }, []);
+
+  const onResetFilters = React.useCallback(() => {
+    setFilterMethod("");
+    setFilterStatusMin("");
+    setFilterStatusMax("");
+    setFilterQ("");
+    setFilterRegex("");
+  }, []);
+
+  const onTogglePin = React.useCallback(
+    (req: CapturedRequest) => {
+      if (pinnedIds.has(req.id)) {
+        if (compareAId === req.id) setCompareAId(null);
+        if (compareBId === req.id) setCompareBId(null);
+        return;
+      }
+
+      if (!canPinMore) return;
+      if (!compareAId) setCompareAId(req.id);
+      else if (!compareBId) setCompareBId(req.id);
+    },
+    [pinnedIds, compareAId, compareBId, canPinMore]
+  );
+
+  const onReplayed = React.useCallback(() => {
+    if (hasActiveFilter) {
+      refreshQuery();
+      return;
+    }
+    refreshRequests();
+  }, [hasActiveFilter, refreshQuery, refreshRequests]);
 
   return (
     <div style={{ display: "grid", gridTemplateRows: "1fr auto", height: "100vh" }}>
@@ -295,17 +414,7 @@ export function Dashboard() {
                 style={{ flex: "1 1 160px", minWidth: 160, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
               />
 
-              <button
-                className="button"
-                onClick={() => {
-                  setFilterMethod("");
-                  setFilterStatusMin("");
-                  setFilterStatusMax("");
-                  setFilterQ("");
-                  setFilterRegex("");
-                  void fetchRequests().then((d) => setItems(d));
-                }}
-              >
+              <button className="button" onClick={onResetFilters}>
                 Reset
               </button>
             </div>
@@ -320,66 +429,8 @@ export function Dashboard() {
 
             {analytics && (
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
-                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Status distribution (last {analytics.windowSec}s)</div>
-                  {(() => {
-                    const total = sumRecord(analytics.statusCounts);
-                    const parts = [
-                      { key: "2xx", color: "var(--green)" },
-                      { key: "3xx", color: "var(--blue)" },
-                      { key: "4xx", color: "var(--yellow)" },
-                      { key: "5xx", color: "var(--red)" },
-                      { key: "other", color: "var(--muted)" }
-                    ] as const;
-
-                    return (
-                      <>
-                        <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
-                          {parts.map((p) => {
-                            const n = analytics.statusCounts[p.key] ?? 0;
-                            const pct = total > 0 ? (n / total) * 100 : 0;
-                            return (
-                              <div
-                                key={p.key}
-                                style={{ width: `${pct}%`, background: p.color }}
-                                title={`${p.key}: ${n}`}
-                              />
-                            );
-                          })}
-                        </div>
-
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                          {parts.map((p) => (
-                            <span key={p.key} className="badge">
-                              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, background: p.color, marginRight: 6, verticalAlign: "middle" }} />
-                              {p.key}: {analytics.statusCounts[p.key] ?? 0}
-                            </span>
-                          ))}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
-                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Latency histogram (ms)</div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 60 }}>
-                    {analytics.latencyHistogram.map((b, i) => {
-                      const max = Math.max(1, ...analytics.latencyHistogram.map((x) => x.count));
-                      const h = Math.round((b.count / max) * 60);
-                      const label = b.max === Infinity ? `${b.min}+` : `${b.min}-${b.max}`;
-                      return (
-                        <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${label}ms: ${b.count}`}>
-                          <div style={{ height: h, background: "rgba(96,165,250,0.5)", border: "1px solid rgba(96,165,250,0.7)", borderRadius: 6 }} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
-                    <span>fast</span>
-                    <span>slow</span>
-                  </div>
-                </div>
+                <StatusDistribution analytics={analytics} />
+                <LatencyHistogram analytics={analytics} />
               </div>
             )}
           </div>
@@ -389,17 +440,7 @@ export function Dashboard() {
             onSelect={setSelectedId}
             pinnedIds={pinnedIds}
             canPinMore={canPinMore}
-            onTogglePin={(req) => {
-              if (pinnedIds.has(req.id)) {
-                if (compareAId === req.id) setCompareAId(null);
-                if (compareBId === req.id) setCompareBId(null);
-                return;
-              }
-
-              if (!canPinMore) return;
-              if (!compareAId) setCompareAId(req.id);
-              else if (!compareBId) setCompareBId(req.id);
-            }}
+            onTogglePin={onTogglePin}
           />
         </div>
 
@@ -465,7 +506,7 @@ export function Dashboard() {
               </div>
             </div>
           ) : (
-            <RequestDetails request={selected ?? null} onReplayed={() => void 0} />
+            <RequestDetails request={selected ?? null} onReplayed={onReplayed} />
           )}
         </div>
       </div>
@@ -482,7 +523,7 @@ export function Dashboard() {
           gap: 12
         }}
       >
-        <div>Copyright Flowly 2026</div>
+        <div>Flowly 2026</div>
         <a href="https://github.com/fallingintoyourarms/Flowly" target="_blank" rel="noreferrer">github.com/fallingintoyourarms/Flowly</a>
       </div>
     </div>

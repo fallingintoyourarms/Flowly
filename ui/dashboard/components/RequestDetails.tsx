@@ -1,5 +1,5 @@
 import React from "react";
-import type { CapturedRequest } from "../../../types/capturedRequest";
+import type { CapturedRequest } from "../../../types/capturedRequest.js";
 
 function formatMaybeJson(text?: string): string {
   if (!text) return "";
@@ -66,7 +66,7 @@ function protocolInsights(req: CapturedRequest): string[] {
     const method = req.grpc?.method;
     out.push(`gRPC: ${service ?? "(unknown service)"}${method ? `/${method}` : ""}`);
     if (req.contentType) out.push(`content-type: ${req.contentType}`);
-    out.push("Note: Flowly currently captures gRPC at the HTTP/2 metadata level only (no protobuf decoding yet).");
+    out.push("Note: Flowly currently captures gRPC at the HTTP/2 metadata level only");
     out.push("For debugging, look at `grpc-status` / `grpc-message` response headers if present.");
   }
 
@@ -367,7 +367,7 @@ export function RequestDetails(props: {
                 {(r.wsFrames || []).length === 0 ? (
                   <div style={{ color: "var(--muted)" }}>No frames captured yet...</div>
                 ) : (
-                  (r.wsFrames || []).map((frame, i) => (
+                  (r.wsFrames || []).map((frame: any, i: number) => (
                     <div 
                       key={i}
                       style={{

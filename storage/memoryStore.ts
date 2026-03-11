@@ -1,4 +1,4 @@
-import type { CapturedRequest } from "../types/capturedRequest";
+import type { CapturedRequest } from "../types/capturedRequest.js";
 
 type StoreEvent =
   | { type: "request_added"; request: CapturedRequest }

@@ -1,5 +1,5 @@
 import React from "react";
-import type { CapturedRequest } from "../../../types/capturedRequest";
+import type { CapturedRequest } from "../../../types/capturedRequest.js";
 
 function statusColor(status?: number): string {
   if (!status) return "var(--muted)";

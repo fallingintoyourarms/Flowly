@@ -1,7 +1,7 @@
 import React from "react";
 import type { CapturedRequest } from "../../types/capturedRequest.js";
-import { RequestList } from "./components/RequestList";
-import { RequestDetails } from "./components/RequestDetails";
+import { RequestList } from "./components/RequestList.js";
+import { RequestDetails } from "./components/RequestDetails.js";
 
 async function fetchRequests(): Promise<CapturedRequest[]> {
   const res = await fetch("/api/requests");

@@ -204,264 +204,286 @@ export function Dashboard() {
   };
 
   return (
-    <div className="appShell">
-      <div className="sidePanel">
-        <div className="panelHeader">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <div>
-              <div className="titleRow">
-                <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
-                <span className={`badge ${live ? "badge--ok" : "badge--warn"}`}>{live ? "live" : "offline"}</span>
-                <span className="badge">{items.length}</span>
-              </div>
-              <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
+    <div style={{ display: "grid", gridTemplateRows: "1fr auto", height: "100vh" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "430px 1fr", minHeight: 0 }}>
+        <div style={{ borderRight: "1px solid var(--border)", background: "var(--panel)" }}>
+          <div className="topbar">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ fontWeight: 900, letterSpacing: 0.4 }}>Flowly</div>
+              <span className={`badge ${live ? "badge--ok" : "badge--err"}`}>{live ? "live" : "offline"}</span>
             </div>
-            <div className="toolbar">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/json"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void importTraceFromFile(f);
-                  e.currentTarget.value = "";
-                }}
-              />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div>
+                <div className="titleRow">
+                  <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
+                  <span className={`badge ${live ? "badge--ok" : "badge--warn"}`}>{live ? "live" : "offline"}</span>
+                  <span className="badge">{items.length}</span>
+                </div>
+                <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
+              </div>
+              <div className="toolbar">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="application/json"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void importTraceFromFile(f);
+                    e.currentTarget.value = "";
+                  }}
+                />
 
-              <button className="button" onClick={() => fileRef.current?.click()}>
-                Import JSON
-              </button>
-              <div className="toolbarGroup">
-                <label style={{ color: "var(--muted)", fontSize: 12 }}>
-                  <input
-                    type="checkbox"
-                    checked={paused}
-                    onChange={(e) => void togglePaused(e.target.checked)}
-                  />
-                  Pause
-                </label>
-                <button className="button" onClick={() => void clearAll()}>
-                  Clear
+                <button className="button" onClick={() => fileRef.current?.click()}>
+                  Import JSON
                 </button>
-                <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
-                  Send test request
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-            <select
-              value={filterMethod}
-              onChange={(e) => setFilterMethod(e.target.value)}
-              style={{ background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-            >
-              <option value="">All methods</option>
-              {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-
-            <input
-              value={filterStatusMin}
-              onChange={(e) => setFilterStatusMin(e.target.value)}
-              placeholder="Status min"
-              style={{ width: 110, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-            />
-            <input
-              value={filterStatusMax}
-              onChange={(e) => setFilterStatusMax(e.target.value)}
-              placeholder="Status max"
-              style={{ width: 110, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-            />
-            <input
-              value={filterQ}
-              onChange={(e) => setFilterQ(e.target.value)}
-              placeholder="Keyword"
-              style={{ flex: "1 1 140px", minWidth: 140, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-            />
-            <input
-              value={filterRegex}
-              onChange={(e) => setFilterRegex(e.target.value)}
-              placeholder="Regex"
-              style={{ flex: "1 1 160px", minWidth: 160, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-            />
-
-            <button
-              className="button"
-              onClick={() => {
-                setFilterMethod("");
-                setFilterStatusMin("");
-                setFilterStatusMax("");
-                setFilterQ("");
-                setFilterRegex("");
-                void fetchRequests().then((d) => setItems(d));
-              }}
-            >
-              Reset
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, color: "var(--muted)", fontSize: 12 }}>
-            <span className="badge">rps: {analytics ? analytics.rps.toFixed(2) : "-"}</span>
-            <span className="badge">avg: {analytics?.avgResponseMs !== null && analytics?.avgResponseMs !== undefined ? `${Math.round(analytics.avgResponseMs)}ms` : "-"}</span>
-            <span className="badge">4xx: {analytics ? analytics.statusCounts["4xx"] ?? 0 : "-"}</span>
-            <span className="badge">5xx: {analytics ? analytics.statusCounts["5xx"] ?? 0 : "-"}</span>
-            {hasActiveFilter && <span className="badge">filtered</span>}
-          </div>
-
-          {analytics && (
-            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Status distribution (last {analytics.windowSec}s)</div>
-                {(() => {
-                  const total = sumRecord(analytics.statusCounts);
-                  const parts = [
-                    { key: "2xx", color: "var(--green)" },
-                    { key: "3xx", color: "var(--blue)" },
-                    { key: "4xx", color: "var(--yellow)" },
-                    { key: "5xx", color: "var(--red)" },
-                    { key: "other", color: "var(--muted)" }
-                  ] as const;
-
-                  return (
-                    <>
-                      <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
-                        {parts.map((p) => {
-                          const n = analytics.statusCounts[p.key] ?? 0;
-                          const pct = total > 0 ? (n / total) * 100 : 0;
-                          return (
-                            <div
-                              key={p.key}
-                              style={{ width: `${pct}%`, background: p.color }}
-                              title={`${p.key}: ${n}`}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        {parts.map((p) => (
-                          <span key={p.key} className="badge">
-                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, background: p.color, marginRight: 6, verticalAlign: "middle" }} />
-                            {p.key}: {analytics.statusCounts[p.key] ?? 0}
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-
-              <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Latency histogram (ms)</div>
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 60 }}>
-                  {analytics.latencyHistogram.map((b, i) => {
-                    const max = Math.max(1, ...analytics.latencyHistogram.map((x) => x.count));
-                    const h = Math.round((b.count / max) * 60);
-                    const label = b.max === Infinity ? `${b.min}+` : `${b.min}-${b.max}`;
-                    return (
-                      <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${label}ms: ${b.count}`}>
-                        <div style={{ height: h, background: "rgba(96,165,250,0.5)", border: "1px solid rgba(96,165,250,0.7)", borderRadius: 6 }} />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
-                  <span>fast</span>
-                  <span>slow</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <RequestList
-          items={items}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          pinnedIds={pinnedIds}
-          canPinMore={canPinMore}
-          onTogglePin={(req) => {
-            if (pinnedIds.has(req.id)) {
-              if (compareAId === req.id) setCompareAId(null);
-              if (compareBId === req.id) setCompareBId(null);
-              return;
-            }
-
-            if (!canPinMore) return;
-            if (!compareAId) setCompareAId(req.id);
-            else if (!compareBId) setCompareBId(req.id);
-          }}
-        />
-      </div>
-
-      <div className="mainPanel">
-        {compareA && compareB ? (
-          <div style={{ height: "100vh", overflow: "auto" }}>
-            <div
-              style={{
-                padding: 16,
-                borderBottom: "1px solid var(--border)",
-                background: "var(--panel)",
-                position: "sticky",
-                top: 0,
-                zIndex: 5
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>Compare</div>
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
-                    <span className="badge">A: {compareA.method} {compareA.path}</span>
-                    <span style={{ marginLeft: 8 }} className="badge">B: {compareB.method} {compareB.path}</span>
-                  </div>
-                </div>
-                <div className="toolbar">
-                  <button
-                    className="button"
-                    onClick={() => {
-                      setCompareAId(null);
-                      setCompareBId(null);
-                    }}
-                  >
-                    Clear compare
+                <div className="toolbarGroup">
+                  <label style={{ color: "var(--muted)", fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={paused}
+                      onChange={(e) => void togglePaused(e.target.checked)}
+                    />
+                    Pause
+                  </label>
+                  <button className="button" onClick={() => void clearAll()}>
+                    Clear
+                  </button>
+                  <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
+                    Send test request
                   </button>
                 </div>
               </div>
             </div>
 
-            <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div>
-                <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>A</div>
-                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
-                <div className="code">{JSON.stringify(compareA.rawHeaders ?? compareA.headers ?? {}, null, 2)}</div>
-                <div style={{ height: 12 }} />
-                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
-                <div className="code">{compareA.body || "(empty)"}</div>
-                <div style={{ height: 12 }} />
-                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
-                <div className="code">{compareA.responseBody || "(empty)"}</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+              <select
+                value={filterMethod}
+                onChange={(e) => setFilterMethod(e.target.value)}
+                style={{ background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
+              >
+                <option value="">All methods</option>
+                {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                value={filterStatusMin}
+                onChange={(e) => setFilterStatusMin(e.target.value)}
+                placeholder="Status min"
+                style={{ width: 110, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
+              />
+              <input
+                value={filterStatusMax}
+                onChange={(e) => setFilterStatusMax(e.target.value)}
+                placeholder="Status max"
+                style={{ width: 110, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
+              />
+              <input
+                value={filterQ}
+                onChange={(e) => setFilterQ(e.target.value)}
+                placeholder="Keyword"
+                style={{ flex: "1 1 140px", minWidth: 140, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
+              />
+              <input
+                value={filterRegex}
+                onChange={(e) => setFilterRegex(e.target.value)}
+                placeholder="Regex"
+                style={{ flex: "1 1 160px", minWidth: 160, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
+              />
+
+              <button
+                className="button"
+                onClick={() => {
+                  setFilterMethod("");
+                  setFilterStatusMin("");
+                  setFilterStatusMax("");
+                  setFilterQ("");
+                  setFilterRegex("");
+                  void fetchRequests().then((d) => setItems(d));
+                }}
+              >
+                Reset
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, color: "var(--muted)", fontSize: 12 }}>
+              <span className="badge">rps: {analytics ? analytics.rps.toFixed(2) : "-"}</span>
+              <span className="badge">avg: {analytics?.avgResponseMs !== null && analytics?.avgResponseMs !== undefined ? `${Math.round(analytics.avgResponseMs)}ms` : "-"}</span>
+              <span className="badge">4xx: {analytics ? analytics.statusCounts["4xx"] ?? 0 : "-"}</span>
+              <span className="badge">5xx: {analytics ? analytics.statusCounts["5xx"] ?? 0 : "-"}</span>
+              {hasActiveFilter && <span className="badge">filtered</span>}
+            </div>
+
+            {analytics && (
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Status distribution (last {analytics.windowSec}s)</div>
+                  {(() => {
+                    const total = sumRecord(analytics.statusCounts);
+                    const parts = [
+                      { key: "2xx", color: "var(--green)" },
+                      { key: "3xx", color: "var(--blue)" },
+                      { key: "4xx", color: "var(--yellow)" },
+                      { key: "5xx", color: "var(--red)" },
+                      { key: "other", color: "var(--muted)" }
+                    ] as const;
+
+                    return (
+                      <>
+                        <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
+                          {parts.map((p) => {
+                            const n = analytics.statusCounts[p.key] ?? 0;
+                            const pct = total > 0 ? (n / total) * 100 : 0;
+                            return (
+                              <div
+                                key={p.key}
+                                style={{ width: `${pct}%`, background: p.color }}
+                                title={`${p.key}: ${n}`}
+                              />
+                            );
+                          })}
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          {parts.map((p) => (
+                            <span key={p.key} className="badge">
+                              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, background: p.color, marginRight: 6, verticalAlign: "middle" }} />
+                              {p.key}: {analytics.statusCounts[p.key] ?? 0}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <div style={{ border: "1px solid var(--border)", background: "var(--panel2)", borderRadius: 10, padding: 10 }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>Latency histogram (ms)</div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 60 }}>
+                    {analytics.latencyHistogram.map((b, i) => {
+                      const max = Math.max(1, ...analytics.latencyHistogram.map((x) => x.count));
+                      const h = Math.round((b.count / max) * 60);
+                      const label = b.max === Infinity ? `${b.min}+` : `${b.min}-${b.max}`;
+                      return (
+                        <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${label}ms: ${b.count}`}>
+                          <div style={{ height: h, background: "rgba(96,165,250,0.5)", border: "1px solid rgba(96,165,250,0.7)", borderRadius: 6 }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
+                    <span>fast</span>
+                    <span>slow</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <RequestList
+            items={items}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            pinnedIds={pinnedIds}
+            canPinMore={canPinMore}
+            onTogglePin={(req) => {
+              if (pinnedIds.has(req.id)) {
+                if (compareAId === req.id) setCompareAId(null);
+                if (compareBId === req.id) setCompareBId(null);
+                return;
+              }
+
+              if (!canPinMore) return;
+              if (!compareAId) setCompareAId(req.id);
+              else if (!compareBId) setCompareBId(req.id);
+            }}
+          />
+        </div>
+
+        <div style={{ background: "var(--bg)" }}>
+          {compareA && compareB ? (
+            <div style={{ height: "100vh", overflow: "auto" }}>
+              <div
+                style={{
+                  padding: 16,
+                  borderBottom: "1px solid var(--border)",
+                  background: "var(--panel)",
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 5
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>Compare</div>
+                    <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
+                      <span className="badge">A: {compareA.method} {compareA.path}</span>
+                      <span style={{ marginLeft: 8 }} className="badge">B: {compareB.method} {compareB.path}</span>
+                    </div>
+                  </div>
+                  <div className="toolbar">
+                    <button
+                      className="button"
+                      onClick={() => {
+                        setCompareAId(null);
+                        setCompareBId(null);
+                      }}
+                    >
+                      Clear compare
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>B</div>
-                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
-                <div className="code">{JSON.stringify(compareB.rawHeaders ?? compareB.headers ?? {}, null, 2)}</div>
-                <div style={{ height: 12 }} />
-                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
-                <div className="code">{compareB.body || "(empty)"}</div>
-                <div style={{ height: 12 }} />
-                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
-                <div className="code">{compareB.responseBody || "(empty)"}</div>
+              <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>A</div>
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
+                  <div className="code">{JSON.stringify(compareA.rawHeaders ?? compareA.headers ?? {}, null, 2)}</div>
+                  <div style={{ height: 12 }} />
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
+                  <div className="code">{compareA.body || "(empty)"}</div>
+                  <div style={{ height: 12 }} />
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
+                  <div className="code">{compareA.responseBody || "(empty)"}</div>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>B</div>
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
+                  <div className="code">{JSON.stringify(compareB.rawHeaders ?? compareB.headers ?? {}, null, 2)}</div>
+                  <div style={{ height: 12 }} />
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
+                  <div className="code">{compareB.body || "(empty)"}</div>
+                  <div style={{ height: 12 }} />
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
+                  <div className="code">{compareB.responseBody || "(empty)"}</div>
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <RequestDetails request={selected} onReplayed={() => void 0} />
-        )}
+          ) : (
+            <RequestDetails request={selected ?? null} onReplayed={() => void 0} />
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          borderTop: "1px solid var(--border)",
+          background: "var(--panel)",
+          padding: "10px 14px",
+          fontSize: 12,
+          color: "var(--muted)",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12
+        }}
+      >
+        <div>Copyright Flowly 2026</div>
+        <a href="https://github.com/fallingintoyourarms/Flowly" target="_blank" rel="noreferrer">github.com/fallingintoyourarms/Flowly</a>
       </div>
     </div>
   );

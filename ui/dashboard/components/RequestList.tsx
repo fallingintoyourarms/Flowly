@@ -16,6 +16,15 @@ function errorClass(status?: number): string {
   return "";
 }
 
+function protocolLabel(p?: CapturedRequest["protocol"]): string | null {
+  if (!p) return null;
+  if (p === "websocket") return "ws";
+  if (p === "graphql-subscription") return "gql-sub";
+  if (p === "graphql") return "gql";
+  if (p === "grpc") return "grpc";
+  return null;
+}
+
 export function RequestList(props: {
   items: CapturedRequest[];
   selectedId: string | null;
@@ -37,6 +46,7 @@ export function RequestList(props: {
         const active = r.id === props.selectedId;
         const cls = errorClass(r.responseStatus);
         const pinned = props.pinnedIds?.has(r.id) ?? false;
+        const proto = protocolLabel(r.protocol);
         return (
           <button
             key={r.id}
@@ -49,6 +59,7 @@ export function RequestList(props: {
               </div>
               <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
                 <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                  {proto && <span className="badge">{proto}</span>}
                   <span>{r.path}</span>
                   {props.onTogglePin && (
                     <button

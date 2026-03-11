@@ -174,6 +174,9 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
 
     const captured = captureRequest(req, undefined, targetUrl.toString());
     captured.isWebSocket = true;
+    captured.protocol = "websocket";
+    const ctHeader = captured.rawHeaders?.["content-type"] ?? captured.rawHeaders?.["Content-Type"];
+    if (typeof ctHeader === "string") captured.contentType = ctHeader.split(";")[0]?.trim().toLowerCase();
     captured.headers = stripHeaders(captured.headers, opts.ignoreHeaders) ?? {};
     captured.rawHeaders = stripHeaders(captured.rawHeaders, opts.ignoreHeaders);
     memoryStore.add(captured);

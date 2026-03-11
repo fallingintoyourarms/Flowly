@@ -35,6 +35,44 @@ function analyzeHttpError(req: CapturedRequest): string[] {
   return hints;
 }
 
+function protocolBadge(req: CapturedRequest): string | null {
+  const p = req.protocol;
+  if (!p || p === "http") return null;
+  if (p === "websocket") return "ws";
+  if (p === "graphql") return "graphql";
+  if (p === "graphql-subscription") return "graphql-sub";
+  if (p === "grpc") return "grpc";
+  return null;
+}
+
+function protocolInsights(req: CapturedRequest): string[] {
+  const out: string[] = [];
+
+  if (req.protocol === "graphql" || req.protocol === "graphql-subscription") {
+    const opType = req.graphql?.operationType;
+    const opName = req.graphql?.operationName;
+
+    out.push(`GraphQL: ${opType ?? "unknown"}${opName ? ` (${opName})` : ""}`);
+    if (req.protocol === "graphql-subscription") {
+      out.push("GraphQL subscription detected: subscriptions are long-lived; watch for keepalives and incremental payloads.");
+    }
+    if (req.responseStatus && req.responseStatus >= 400) {
+      out.push("If this is GraphQL over HTTP, check for `errors` in the JSON response body even when status is 200.");
+    }
+  }
+
+  if (req.protocol === "grpc") {
+    const service = req.grpc?.service;
+    const method = req.grpc?.method;
+    out.push(`gRPC: ${service ?? "(unknown service)"}${method ? `/${method}` : ""}`);
+    if (req.contentType) out.push(`content-type: ${req.contentType}`);
+    out.push("Note: Flowly currently captures gRPC at the HTTP/2 metadata level only (no protobuf decoding yet).");
+    out.push("For debugging, look at `grpc-status` / `grpc-message` response headers if present.");
+  }
+
+  return out;
+}
+
 function headersToPretty(headers?: Record<string, string>): string {
   if (!headers) return "";
   const sorted = Object.keys(headers)
@@ -128,6 +166,8 @@ export function RequestDetails(props: {
   const requestHeaders = revealSensitive ? r.rawHeaders ?? r.headers : r.headers;
   const responseHeaders = revealSensitive ? r.rawResponseHeaders ?? r.responseHeaders : r.responseHeaders;
   const hints = analyzeHttpError(r);
+  const proto = protocolBadge(r);
+  const protoHints = protocolInsights(r);
 
   const copyCurl = async () => {
     const text = toCurl(r, revealSensitive);
@@ -171,8 +211,32 @@ export function RequestDetails(props: {
           </div>
         </div>
       )}
+
+      {protoHints.length > 0 && (
+        <div style={{ padding: 16, borderBottom: "1px solid var(--border)", background: "var(--panel2)" }}>
+          <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Protocol</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {protoHints.map((h: string, idx: number) => (
+              <div key={idx} style={{ color: "var(--text)", fontSize: 12, lineHeight: 1.4 }}>
+                <span className="badge">info</span>
+                <span style={{ marginLeft: 8, color: "var(--muted)" }}>{h}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
             <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
               <span className="badge">id: {r.id}</span>
+              {proto && (
+                <span style={{ marginLeft: 8 }} className="badge">
+                  proto: {proto}
+                </span>
+              )}
+              {r.contentType && (
+                <span style={{ marginLeft: 8 }} className="badge">
+                  ct: {r.contentType}
+                </span>
+              )}
               <span style={{ marginLeft: 8 }} className="badge">
                 status: {r.responseStatus ?? "-"}
               </span>

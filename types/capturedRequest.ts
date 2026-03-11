@@ -19,6 +19,18 @@ export interface CapturedRequest {
   responseBody?: string;
   duration?: number;
   targetUrl?: string;
+  protocol?: "http" | "websocket" | "graphql" | "graphql-subscription" | "grpc";
+  contentType?: string;
+
+  graphql?: {
+    operationType?: "query" | "mutation" | "subscription";
+    operationName?: string;
+  };
+
+  grpc?: {
+    service?: string;
+    method?: string;
+  };
   isWebSocket?: boolean;
   wsFrames?: WebSocketFrame[];
 

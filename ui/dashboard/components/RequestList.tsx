@@ -20,6 +20,9 @@ export function RequestList(props: {
   items: CapturedRequest[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  pinnedIds?: Set<string>;
+  canPinMore?: boolean;
+  onTogglePin?: (req: CapturedRequest) => void;
 }) {
   return (
     <div style={{ height: "calc(100vh - 64px)", overflow: "auto" }}>
@@ -33,6 +36,7 @@ export function RequestList(props: {
       {props.items.map((r) => {
         const active = r.id === props.selectedId;
         const cls = errorClass(r.responseStatus);
+        const pinned = props.pinnedIds?.has(r.id) ?? false;
         return (
           <button
             key={r.id}
@@ -44,7 +48,25 @@ export function RequestList(props: {
                 {r.method}
               </div>
               <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
-                {r.path}
+                <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                  <span>{r.path}</span>
+                  {props.onTogglePin && (
+                    <button
+                      type="button"
+                      className="button"
+                      style={{ padding: "2px 8px", fontSize: 11, height: 22 }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onTogglePin?.(r);
+                      }}
+                      disabled={!pinned && props.canPinMore === false}
+                      title={pinned ? "Unpin" : "Pin for compare"}
+                    >
+                      {pinned ? "Unpin" : "Pin"}
+                    </button>
+                  )}
+                </span>
               </div>
               <div className="mono" style={{ textAlign: "right", color: statusColor(r.responseStatus) }}>
                 {r.responseStatus ?? "-"}

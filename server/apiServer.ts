@@ -260,6 +260,8 @@ export function startApiServer(opts: ApiServerOptions) {
     const item = memoryStore.get(req.params.id);
     if (!item || !item.targetUrl) return res.status(404).json({ error: "Not found" });
 
+    memoryStore.update(item.id, { replayStatus: "running", replayError: undefined });
+
     const url = item.targetUrl;
 
     const headers: Record<string, string> = { ...item.headers };
@@ -276,6 +278,11 @@ export function startApiServer(opts: ApiServerOptions) {
       });
       text = await response.text();
     } catch {
+      memoryStore.update(item.id, {
+        replayStatus: "failed",
+        replayedAt: Date.now(),
+        replayError: "Replay failed (target unreachable)"
+      });
       return res.status(502).json({ error: "Replay failed (target unreachable)" });
     }
 
@@ -291,12 +298,21 @@ export function startApiServer(opts: ApiServerOptions) {
 
     memoryStore.add(replayed);
 
+    memoryStore.update(item.id, {
+      replayStatus: "succeeded",
+      replayedAt: Date.now(),
+      replayedId: replayed.id,
+      replayError: undefined
+    });
+
     res.json(replayed);
   });
 
   app.post("/replay/:id/modify", async (req, res) => {
     const item = memoryStore.get(req.params.id);
     if (!item || !item.targetUrl) return res.status(404).json({ error: "Not found" });
+
+    memoryStore.update(item.id, { replayStatus: "running", replayError: undefined });
 
     const { headers: modifiedHeaders, body: modifiedBody, method: modifiedMethod } = req.body || {};
 
@@ -330,6 +346,11 @@ export function startApiServer(opts: ApiServerOptions) {
       });
       text = await response.text();
     } catch {
+      memoryStore.update(item.id, {
+        replayStatus: "failed",
+        replayedAt: Date.now(),
+        replayError: "Replay failed (target unreachable)"
+      });
       return res.status(502).json({ error: "Replay failed (target unreachable)" });
     }
 
@@ -348,6 +369,13 @@ export function startApiServer(opts: ApiServerOptions) {
     };
 
     memoryStore.add(replayed);
+
+    memoryStore.update(item.id, {
+      replayStatus: "succeeded",
+      replayedAt: Date.now(),
+      replayedId: replayed.id,
+      replayError: undefined
+    });
 
     res.json(replayed);
   });

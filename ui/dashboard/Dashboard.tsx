@@ -60,6 +60,9 @@ export function Dashboard() {
   const [paused, setPaused] = React.useState(false);
   const [live, setLive] = React.useState(false);
 
+  const [compareAId, setCompareAId] = React.useState<string | null>(null);
+  const [compareBId, setCompareBId] = React.useState<string | null>(null);
+
   const [filterMethod, setFilterMethod] = React.useState<string>("");
   const [filterStatusMin, setFilterStatusMin] = React.useState<string>("");
   const [filterStatusMax, setFilterStatusMax] = React.useState<string>("");
@@ -180,6 +183,12 @@ export function Dashboard() {
   }, [hasActiveFilter, filterMethod, filterStatusMin, filterStatusMax, filterQ, filterRegex]);
 
   const selected = items.find((i) => i.id === selectedId) ?? null;
+
+  const compareA = items.find((i) => i.id === compareAId) ?? null;
+  const compareB = items.find((i) => i.id === compareBId) ?? null;
+  const pinnedIds = new Set([compareAId, compareBId].filter(Boolean) as string[]);
+  const pinnedCount = pinnedIds.size;
+  const canPinMore = pinnedCount < 2;
 
   const fileRef = React.useRef<HTMLInputElement | null >(null);
 
@@ -369,11 +378,90 @@ export function Dashboard() {
             </div>
           )}
         </div>
-        <RequestList items={items} selectedId={selectedId} onSelect={setSelectedId} />
+        <RequestList
+          items={items}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          pinnedIds={pinnedIds}
+          canPinMore={canPinMore}
+          onTogglePin={(req) => {
+            if (pinnedIds.has(req.id)) {
+              if (compareAId === req.id) setCompareAId(null);
+              if (compareBId === req.id) setCompareBId(null);
+              return;
+            }
+
+            if (!canPinMore) return;
+            if (!compareAId) setCompareAId(req.id);
+            else if (!compareBId) setCompareBId(req.id);
+          }}
+        />
       </div>
 
       <div className="mainPanel">
-        <RequestDetails request={selected} onReplayed={() => void 0} />
+        {compareA && compareB ? (
+          <div style={{ height: "100vh", overflow: "auto" }}>
+            <div
+              style={{
+                padding: 16,
+                borderBottom: "1px solid var(--border)",
+                background: "var(--panel)",
+                position: "sticky",
+                top: 0,
+                zIndex: 5
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>Compare</div>
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
+                    <span className="badge">A: {compareA.method} {compareA.path}</span>
+                    <span style={{ marginLeft: 8 }} className="badge">B: {compareB.method} {compareB.path}</span>
+                  </div>
+                </div>
+                <div className="toolbar">
+                  <button
+                    className="button"
+                    onClick={() => {
+                      setCompareAId(null);
+                      setCompareBId(null);
+                    }}
+                  >
+                    Clear compare
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div>
+                <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>A</div>
+                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
+                <div className="code">{JSON.stringify(compareA.rawHeaders ?? compareA.headers ?? {}, null, 2)}</div>
+                <div style={{ height: 12 }} />
+                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
+                <div className="code">{compareA.body || "(empty)"}</div>
+                <div style={{ height: 12 }} />
+                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
+                <div className="code">{compareA.responseBody || "(empty)"}</div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>B</div>
+                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
+                <div className="code">{JSON.stringify(compareB.rawHeaders ?? compareB.headers ?? {}, null, 2)}</div>
+                <div style={{ height: 12 }} />
+                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
+                <div className="code">{compareB.body || "(empty)"}</div>
+                <div style={{ height: 12 }} />
+                <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
+                <div className="code">{compareB.responseBody || "(empty)"}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <RequestDetails request={selected} onReplayed={() => void 0} />
+        )}
       </div>
     </div>
   );

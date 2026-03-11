@@ -156,6 +156,12 @@ export function RequestDetails(props: {
         <div style={{ padding: 16, borderBottom: "1px solid var(--border)", background: "var(--panel2)" }}>
           <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Analysis</div>
           <div style={{ display: "grid", gap: 8 }}>
+            {r.replayError && (
+              <div style={{ color: "var(--text)", fontSize: 12, lineHeight: 1.4 }}>
+                <span className="badge badge--err">replay</span>
+                <span style={{ marginLeft: 8, color: "var(--muted)" }}>{r.replayError}</span>
+              </div>
+            )}
             {hints.map((h: string, idx: number) => (
               <div key={idx} style={{ color: "var(--text)", fontSize: 12, lineHeight: 1.4 }}>
                 <span className={`badge ${r.responseStatus && r.responseStatus >= 500 ? "badge--err" : "badge--warn"}`}>hint</span>
@@ -173,6 +179,20 @@ export function RequestDetails(props: {
               <span style={{ marginLeft: 8 }} className="badge">
                 time: {typeof r.duration === "number" ? `${r.duration}ms` : "-"}
               </span>
+
+              {r.replayStatus && r.replayStatus !== "idle" && (
+                <span
+                  style={{ marginLeft: 8 }}
+                  className={`badge ${r.replayStatus === "running" ? "" : r.replayStatus === "succeeded" ? "badge--ok" : "badge--err"}`}
+                >
+                  replay: {r.replayStatus}
+                </span>
+              )}
+              {r.replayedAt && (
+                <span style={{ marginLeft: 8 }} className="badge">
+                  replayed: {new Date(r.replayedAt).toLocaleTimeString()}
+                </span>
+              )}
             </div>
           </div>
           <div className="toolbar">

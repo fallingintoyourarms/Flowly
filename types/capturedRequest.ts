@@ -21,4 +21,11 @@ export interface CapturedRequest {
   targetUrl?: string;
   isWebSocket?: boolean;
   wsFrames?: WebSocketFrame[];
+
+  replayStatus?: "idle" | "running" | "succeeded" | "failed";
+  replayedAt?: number;
+  replayError?: string;
+  replayedId?: string;
+
+  pinnedForCompare?: boolean;
 }

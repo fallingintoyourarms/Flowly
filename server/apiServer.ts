@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
-import type { CapturedRequest } from "../types/capturedRequest";
-import { memoryStore } from "../storage/memoryStore";
+import type { CapturedRequest } from "../types/capturedRequest.js";
+import { memoryStore } from "../storage/memoryStore.js";
 
 export interface ApiServerOptions {
   port: number;

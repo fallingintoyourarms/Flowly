@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import type { IncomingMessage } from "node:http";
-import type { CapturedRequest } from "../types/capturedRequest";
+import type { CapturedRequest } from "../types/capturedRequest.js";
 
 const SENSITIVE_HEADERS = new Set(["authorization", "cookie", "set-cookie", "x-api-key"]);
 const MASKED_VALUE = "***";

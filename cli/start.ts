@@ -2,10 +2,10 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import fs from "node:fs";
-import { startProxyServer } from "../core/proxyServer";
-import { startApiServer } from "../server/apiServer";
-import { memoryStore } from "../storage/memoryStore";
-import type { CapturedRequest } from "../types/capturedRequest";
+import { startProxyServer } from "../core/proxyServer.js";
+import { startApiServer } from "../server/apiServer.js";
+import { memoryStore } from "../storage/memoryStore.js";
+import type { CapturedRequest } from "../types/capturedRequest.js";
 
 // Simple ANSI color helpers
 const c = {

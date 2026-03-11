@@ -2,10 +2,10 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import zlib from "node:zlib";
 import httpProxy from "http-proxy";
-import { memoryStore } from "../storage/memoryStore";
-import { captureRequest } from "./requestCapture";
-import { captureResponse } from "./responseCapture";
-import type { WebSocketFrame } from "../types/capturedRequest";
+import { memoryStore } from "../storage/memoryStore.js";
+import { captureRequest } from "./requestCapture.js";
+import { captureResponse } from "./responseCapture.js";
+import type { WebSocketFrame } from "../types/capturedRequest.js";
 
 export interface ProxyServerOptions {
   port: number;
@@ -163,13 +163,11 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     proxy.web(req, res, { target: opts.target });
   });
 
-  // Handle WebSocket upgrade
   server.on("upgrade", (req, socket, head) => {
     const targetUrl = new URL(req.url ?? "/", opts.target);
     const isWS = targetUrl.protocol === "ws:" || targetUrl.protocol === "wss:" || opts.target.startsWith("ws");
     
     if (!isWS) {
-      // Pass through non-WS upgrades
       proxy.ws(req, socket as any, head, { target: opts.target });
       return;
     }
@@ -180,17 +178,14 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     captured.rawHeaders = stripHeaders(captured.rawHeaders, opts.ignoreHeaders);
     memoryStore.add(captured);
 
-    // Store for frame tracking
     wsConnections.set(captured.id, { frames: [] });
 
-    // Create WebSocket proxy
     proxy.ws(req, socket as any, head, { target: opts.target }, (err: Error | null, targetSocket?: any) => {
       if (err) {
         socket.destroy();
         return;
       }
 
-      // Capture frames from client to server
       socket.on("data", (data: Buffer) => {
         const frame: WebSocketFrame = {
           type: "text",

@@ -9,6 +9,30 @@ function formatMaybeJson(text?: string): string {
   } catch {
     return text;
   }
+
+}
+
+function analyzeHttpError(req: CapturedRequest): string[] {
+  const status = req.responseStatus;
+  if (typeof status !== "number") return [];
+  if (status < 400) return [];
+
+  const hints: string[] = [];
+
+  if (status === 401) hints.push("401 Unauthorized: check Authorization header / token / cookie. It may be missing or expired.");
+  if (status === 403) hints.push("403 Forbidden: credentials are present but lack permissions or are scoped incorrectly.");
+  if (status === 404) hints.push("404 Not Found: verify the path and base URL; check route/version mismatches.");
+  if (status === 408) hints.push("408 Request Timeout: upstream may be slow; check server timeouts and request payload size.");
+  if (status === 409) hints.push("409 Conflict: check resource versioning/ETags or duplicate create operations.");
+  if (status === 422) hints.push("422 Unprocessable Entity: request body/schema validation failed; inspect request body.");
+  if (status === 429) hints.push("429 Too Many Requests: rate limiting; reduce request rate or adjust limits.");
+  if (status >= 500) hints.push("5xx Server Error: upstream error/crash; inspect response body and server logs.");
+
+  const body = (req.responseBody ?? "").toLowerCase();
+  if (body.includes("cors")) hints.push("Response mentions CORS: check Origin/Access-Control-* headers and server CORS config.");
+  if (body.includes("csrf")) hints.push("Response mentions CSRF: ensure CSRF token/cookie is present and sent correctly.");
+
+  return hints;
 }
 
 function headersToPretty(headers?: Record<string, string>): string {
@@ -103,6 +127,7 @@ export function RequestDetails(props: {
 
   const requestHeaders = revealSensitive ? r.rawHeaders ?? r.headers : r.headers;
   const responseHeaders = revealSensitive ? r.rawResponseHeaders ?? r.responseHeaders : r.responseHeaders;
+  const hints = analyzeHttpError(r);
 
   const copyCurl = async () => {
     const text = toCurl(r, revealSensitive);
@@ -126,6 +151,20 @@ export function RequestDetails(props: {
             <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }}>
               {r.method} {r.path}
             </div>
+
+      {hints.length > 0 && (
+        <div style={{ padding: 16, borderBottom: "1px solid var(--border)", background: "var(--panel2)" }}>
+          <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>Analysis</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {hints.map((h: string, idx: number) => (
+              <div key={idx} style={{ color: "var(--text)", fontSize: 12, lineHeight: 1.4 }}>
+                <span className={`badge ${r.responseStatus && r.responseStatus >= 500 ? "badge--err" : "badge--warn"}`}>hint</span>
+                <span style={{ marginLeft: 8, color: "var(--muted)" }}>{h}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
             <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
               <span className="badge">id: {r.id}</span>
               <span style={{ marginLeft: 8 }} className="badge">

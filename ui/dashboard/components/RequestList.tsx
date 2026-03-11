@@ -9,6 +9,13 @@ function statusColor(status?: number): string {
   return "var(--red)";
 }
 
+function errorClass(status?: number): string {
+  if (!status) return "";
+  if (status >= 500) return "listItemButton--error";
+  if (status >= 400) return "listItemButton--warn";
+  return "";
+}
+
 export function RequestList(props: {
   items: CapturedRequest[];
   selectedId: string | null;
@@ -25,11 +32,12 @@ export function RequestList(props: {
 
       {props.items.map((r) => {
         const active = r.id === props.selectedId;
+        const cls = errorClass(r.responseStatus);
         return (
           <button
             key={r.id}
             onClick={() => props.onSelect(r.id)}
-            className={`listItemButton ${active ? "listItemButton--active" : ""}`}
+            className={`listItemButton ${active ? "listItemButton--active" : ""} ${cls}`}
           >
             <div className="listRow">
               <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
@@ -40,6 +48,11 @@ export function RequestList(props: {
               </div>
               <div className="mono" style={{ textAlign: "right", color: statusColor(r.responseStatus) }}>
                 {r.responseStatus ?? "-"}
+                {typeof r.responseStatus === "number" && r.responseStatus >= 400 && (
+                  <span style={{ marginLeft: 6 }} className={`badge ${r.responseStatus >= 500 ? "badge--err" : "badge--warn"}`}>
+                    {r.responseStatus >= 500 ? "error" : "warn"}
+                  </span>
+                )}
               </div>
               <div className="mono" style={{ textAlign: "right", color: "var(--muted)" }}>
                 {typeof r.duration === "number" ? `${r.duration}ms` : "-"}

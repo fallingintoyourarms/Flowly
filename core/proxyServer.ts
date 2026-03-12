@@ -68,6 +68,13 @@ function readStreamBody(req: IncomingMessage): Promise<string | undefined> {
  * - Intercept request + response data for the dashboard
  */
 export function startProxyServer(opts: ProxyServerOptions): http.Server {
+  let targetBase: URL | null = null;
+  try {
+    targetBase = new URL(opts.target);
+  } catch {
+    targetBase = null;
+  }
+
   function stripHeaders(
     headers: Record<string, string> | undefined,
     ignore: string[] | undefined
@@ -131,7 +138,14 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
 
-    const targetUrl = new URL(req.url ?? "/", opts.target).toString();
+    let targetUrl = opts.target;
+    if (targetBase) {
+      try {
+        targetUrl = new URL(req.url ?? "/", targetBase).toString();
+      } catch {
+        targetUrl = targetBase.toString();
+      }
+    }
 
     const requestPath = req.url ?? "/";
     if (shouldIgnorePath(requestPath, opts.ignorePaths)) {
@@ -164,7 +178,11 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
   });
 
   server.on("upgrade", (req, socket, head) => {
-    const targetUrl = new URL(req.url ?? "/", opts.target);
+    const targetUrl = targetBase ? new URL(req.url ?? "/", targetBase) : null;
+    if (!targetUrl) {
+      socket.destroy();
+      return;
+    }
     const isWS = targetUrl.protocol === "ws:" || targetUrl.protocol === "wss:" || opts.target.startsWith("ws");
     
     if (!isWS) {

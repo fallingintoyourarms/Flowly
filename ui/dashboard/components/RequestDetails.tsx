@@ -1,5 +1,23 @@
 import React from "react";
 import type { CapturedRequest } from "../../../types/capturedRequest.js";
+import { Badge } from "../../src/components/ui/badge.js";
+import { Button } from "../../src/components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../../src/components/ui/card.js";
+import { Input } from "../../src/components/ui/input.js";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../src/components/ui/tooltip.js";
+import {
+  Copy,
+  Edit3,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  Save,
+  X,
+  AlertTriangle,
+  Activity,
+  Braces,
+  Cable
+} from "lucide-react";
 
 function formatMaybeJson(text?: string): string {
   if (!text) return "";
@@ -108,16 +126,334 @@ function toCurl(req: CapturedRequest, revealSensitive: boolean): string {
   return parts.join(" ");
 }
 
+function safeJsonParse<T>(text: string): { ok: true; value: T } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(text) as T };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function protoIcon(p: CapturedRequest["protocol"] | undefined) {
+  if (p === "graphql" || p === "graphql-subscription") return <Braces className="h-4 w-4" />;
+  if (p === "grpc") return <Cable className="h-4 w-4" />;
+  if (p === "websocket") return <Activity className="h-4 w-4" />;
+  return null;
+}
+
 export function RequestDetails(props: {
   request: CapturedRequest | null;
   onReplayed: () => void;
 }) {
   const r = props.request;
-  if (!r) return <div className="p-6 text-sm text-muted-foreground">No request selected</div>;
+  const [revealSensitive, setRevealSensitive] = React.useState(false);
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editHeaders, setEditHeaders] = React.useState("");
+  const [editBody, setEditBody] = React.useState("");
+  const [editMethod, setEditMethod] = React.useState("");
+  const [copyState, setCopyState] = React.useState<"idle" | "copied">("idle");
+
+  React.useEffect(() => {
+    if (!r) return;
+    const headers = revealSensitive ? r.rawHeaders ?? r.headers : r.headers;
+    setEditHeaders(JSON.stringify(headers ?? {}, null, 2));
+    setEditBody(r.body || "");
+    setEditMethod(r.method);
+    setIsEditing(false);
+    setCopyState("idle");
+  }, [r?.id, revealSensitive]);
+
+  const requestHeaders = revealSensitive ? r?.rawHeaders ?? r?.headers : r?.headers;
+  const responseHeaders = revealSensitive ? r?.rawResponseHeaders ?? r?.responseHeaders : r?.responseHeaders;
+
+  const hints = React.useMemo(() => (r ? analyzeHttpError(r) : []), [r]);
+  const proto = React.useMemo(() => (r ? protocolBadge(r) : null), [r]);
+  const protoHints = React.useMemo(() => (r ? protocolInsights(r) : []), [r]);
+
+  const copyCurl = React.useCallback(async () => {
+    if (!r) return;
+    const text = toCurl(r, revealSensitive);
+    await navigator.clipboard.writeText(text);
+    setCopyState("copied");
+    window.setTimeout(() => setCopyState("idle"), 900);
+  }, [r, revealSensitive]);
+
+  const replay = React.useCallback(async () => {
+    if (!r) return;
+    await fetch(`/api/replay/${r.id}`, { method: "POST" });
+    props.onReplayed();
+  }, [r, props]);
+
+  const replayModified = React.useCallback(async () => {
+    if (!r) return;
+
+    const parsed = safeJsonParse<Record<string, string>>(editHeaders);
+    if (!parsed.ok) {
+      alert("Invalid JSON in headers");
+      return;
+    }
+
+    await fetch(`/api/replay/${r.id}/modify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        headers: parsed.value,
+        body: editBody,
+        method: editMethod
+      })
+    });
+
+    setIsEditing(false);
+    props.onReplayed();
+  }, [r, editHeaders, editBody, editMethod, props]);
+
+  if (!r) {
+    return <div className="p-6 text-sm text-muted-foreground">No request selected</div>;
+  }
+
   return (
-    <div className="p-6">
-      <div className="text-sm font-semibold">{r.method} {r.path}</div>
-      <div className="mt-2 text-sm text-muted-foreground">Request details UI is being rebuilt with Tailwind/shadcn.</div>
-    </div>
+    <TooltipProvider>
+      <div className="h-full">
+        <div className="sticky top-0 z-10 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+          <div className="flex flex-wrap items-start justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <div className="truncate font-mono text-sm">
+                {r.method} {r.path}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <Badge variant="muted">id: {r.id}</Badge>
+                {proto && (
+                  <Badge variant="secondary" className="gap-1">
+                    {protoIcon(r.protocol)}
+                    proto: {proto}
+                  </Badge>
+                )}
+                {r.contentType && <Badge variant="muted">ct: {r.contentType}</Badge>}
+                <Badge variant={typeof r.responseStatus === "number" && r.responseStatus >= 400 ? "warn" : "muted"}>
+                  status: {r.responseStatus ?? "-"}
+                </Badge>
+                <Badge variant="muted">time: {typeof r.duration === "number" ? `${r.duration}ms` : "-"}</Badge>
+
+                {r.replayStatus && r.replayStatus !== "idle" && (
+                  <Badge
+                    variant={r.replayStatus === "running" ? "secondary" : r.replayStatus === "succeeded" ? "success" : "danger"}
+                  >
+                    replay: {r.replayStatus}
+                  </Badge>
+                )}
+                {r.replayedAt && <Badge variant="muted">replayed: {new Date(r.replayedAt).toLocaleTimeString()}</Badge>}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => setRevealSensitive((v) => !v)} aria-label="Toggle sensitive">
+                    {revealSensitive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{revealSensitive ? "Hide" : "Reveal"} sensitive values</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => void copyCurl()} aria-label="Copy cURL">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{copyState === "copied" ? "Copied" : "Copy as cURL"}</TooltipContent>
+              </Tooltip>
+
+              {!isEditing ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => void replay()}>
+                    <RotateCcw className="h-4 w-4" />
+                    Replay
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setIsEditing(true)}>
+                    <Edit3 className="h-4 w-4" />
+                    Edit
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="default" size="sm" onClick={() => void replayModified()}>
+                    <Save className="h-4 w-4" />
+                    Replay Modified
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-4 lg:grid-cols-2">
+          <div className="space-y-4">
+            {(hints.length > 0 || r.replayError) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-200" />
+                    Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {r.replayError && (
+                    <div className="text-sm">
+                      <Badge variant="danger">replay</Badge>
+                      <span className="ml-2 text-muted-foreground">{r.replayError}</span>
+                    </div>
+                  )}
+                  {hints.map((h, idx) => (
+                    <div key={idx} className="text-sm">
+                      <Badge variant={r.responseStatus && r.responseStatus >= 500 ? "danger" : "warn"}>hint</Badge>
+                      <span className="ml-2 text-muted-foreground">{h}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {protoHints.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    {protoIcon(r.protocol) ?? <Activity className="h-4 w-4" />}
+                    Protocol
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {protoHints.map((h, idx) => (
+                    <div key={idx} className="text-sm">
+                      <Badge variant="muted">info</Badge>
+                      <span className="ml-2 text-muted-foreground">{h}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Request</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isEditing && (
+                  <div className="grid gap-2">
+                    <div className="text-xs text-muted-foreground">Method</div>
+                    <select
+                      value={editMethod}
+                      onChange={(e) => setEditMethod(e.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <div className="mb-2 text-xs text-muted-foreground">Headers</div>
+                  {isEditing ? (
+                    <textarea
+                      value={editHeaders}
+                      onChange={(e) => setEditHeaders(e.target.value)}
+                      className="min-h-40 w-full resize-y rounded-md border border-input bg-background p-3 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                  ) : (
+                    <pre className="max-h-72 overflow-auto rounded-md border bg-background p-3 font-mono text-xs">
+                      {headersToPretty(requestHeaders) || "(empty)"}
+                    </pre>
+                  )}
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs text-muted-foreground">Body</div>
+                  {isEditing ? (
+                    <textarea
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      className="min-h-40 w-full resize-y rounded-md border border-input bg-background p-3 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                  ) : (
+                    <pre className="max-h-72 overflow-auto rounded-md border bg-background p-3 font-mono text-xs">
+                      {formatMaybeJson(r.body) || "(empty)"}
+                    </pre>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Response</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {r.isWebSocket ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary">WebSocket</Badge>
+                      <Badge variant="muted">frames: {(r.wsFrames || []).length}</Badge>
+                    </div>
+                    <div className="space-y-2">
+                      {(r.wsFrames || []).length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No frames captured yet...</div>
+                      ) : (
+                        (r.wsFrames || []).map((frame: any, i: number) => {
+                          const outbound = frame.direction === "client";
+                          return (
+                            <div
+                              key={i}
+                              className={
+                                "rounded-md border p-3 " +
+                                (outbound
+                                  ? "border-blue-500/30 bg-blue-500/10"
+                                  : "border-emerald-500/30 bg-emerald-500/10")
+                              }
+                            >
+                              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span>{outbound ? "→ Server" : "← Server"}</span>
+                                <span>{frame.timestamp ? new Date(frame.timestamp).toLocaleTimeString() : ""}</span>
+                              </div>
+                              <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs">
+                                {frame.data || "(binary)"}
+                              </pre>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <div className="mb-2 text-xs text-muted-foreground">Headers</div>
+                      <pre className="max-h-72 overflow-auto rounded-md border bg-background p-3 font-mono text-xs">
+                        {headersToPretty(responseHeaders) || "(empty)"}
+                      </pre>
+                    </div>
+                    <div>
+                      <div className="mb-2 text-xs text-muted-foreground">Body</div>
+                      <pre className="max-h-72 overflow-auto rounded-md border bg-background p-3 font-mono text-xs">
+                        {formatMaybeJson(r.responseBody) || "(empty)"}
+                      </pre>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </TooltipProvider>
   );
 }

@@ -1,19 +1,15 @@
 import React from "react";
 import type { CapturedRequest } from "../../../types/capturedRequest.js";
+import { Badge } from "../../src/components/ui/badge.js";
+import { Button } from "../../src/components/ui/button.js";
+import { Pin, PinOff } from "lucide-react";
 
-function statusColor(status?: number): string {
-  if (!status) return "var(--muted)";
-  if (status >= 200 && status < 300) return "var(--green)";
-  if (status >= 300 && status < 400) return "var(--blue)";
-  if (status >= 400 && status < 500) return "var(--yellow)";
-  return "var(--red)";
-}
-
-function errorClass(status?: number): string {
-  if (!status) return "";
-  if (status >= 500) return "listItemButton--error";
-  if (status >= 400) return "listItemButton--warn";
-  return "";
+function statusVariant(status?: number): "success" | "warn" | "danger" | "muted" {
+  if (!status) return "muted";
+  if (status >= 200 && status < 300) return "success";
+  if (status >= 300 && status < 400) return "secondary" as any;
+  if (status >= 400 && status < 500) return "warn";
+  return "danger";
 }
 
 function protocolLabel(p?: CapturedRequest["protocol"]): string | null {
@@ -34,66 +30,65 @@ export function RequestList(props: {
   onTogglePin?: (req: CapturedRequest) => void;
 }) {
   return (
-    <div style={{ height: "calc(100vh - 64px)", overflow: "auto" }}>
-      <div className="listHeader">
-        <div>METHOD</div>
-        <div>PATH</div>
-        <div style={{ textAlign: "right" }}>STATUS</div>
-        <div style={{ textAlign: "right" }}>TIME</div>
-      </div>
+    <div className="divide-y overflow-hidden">
+      {props.items.length === 0 ? (
+        <div className="p-6 text-sm text-muted-foreground">No requests captured yet.</div>
+      ) : (
+        props.items.map((r) => {
+          const active = r.id === props.selectedId;
+          const pinned = props.pinnedIds?.has(r.id) ?? false;
+          const proto = protocolLabel(r.protocol);
+          const statusV = statusVariant(r.responseStatus);
+          return (
+            <button
+              key={r.id}
+              onClick={() => props.onSelect(r.id)}
+              className={
+                "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 " +
+                (active ? "bg-muted/40" : "")
+              }
+            >
+              <div className="w-14 shrink-0">
+                <Badge variant="outline" className="justify-center w-full">
+                  {r.method}
+                </Badge>
+              </div>
 
-      {props.items.map((r) => {
-        const active = r.id === props.selectedId;
-        const cls = errorClass(r.responseStatus);
-        const pinned = props.pinnedIds?.has(r.id) ?? false;
-        const proto = protocolLabel(r.protocol);
-        return (
-          <button
-            key={r.id}
-            onClick={() => props.onSelect(r.id)}
-            className={`listItemButton ${active ? "listItemButton--active" : ""} ${cls}`}
-          >
-            <div className="listRow">
-              <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
-                {r.method}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {proto && <Badge variant="muted">{proto}</Badge>}
+                  <div className="truncate text-sm font-medium">{r.path}</div>
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>id: {r.id.slice(0, 8)}</span>
+                  {typeof r.duration === "number" && <span>· {r.duration}ms</span>}
+                </div>
               </div>
-              <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
-                <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-                  {proto && <span className="badge">{proto}</span>}
-                  <span>{r.path}</span>
-                  {props.onTogglePin && (
-                    <button
-                      type="button"
-                      className="button"
-                      style={{ padding: "2px 8px", fontSize: 11, height: 22 }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        props.onTogglePin?.(r);
-                      }}
-                      disabled={!pinned && props.canPinMore === false}
-                      title={pinned ? "Unpin" : "Pin for compare"}
-                    >
-                      {pinned ? "Unpin" : "Pin"}
-                    </button>
-                  )}
-                </span>
-              </div>
-              <div className="mono" style={{ textAlign: "right", color: statusColor(r.responseStatus) }}>
-                {r.responseStatus ?? "-"}
-                {typeof r.responseStatus === "number" && r.responseStatus >= 400 && (
-                  <span style={{ marginLeft: 6 }} className={`badge ${r.responseStatus >= 500 ? "badge--err" : "badge--warn"}`}>
-                    {r.responseStatus >= 500 ? "error" : "warn"}
-                  </span>
+
+              <div className="flex items-center gap-2">
+                <Badge variant={statusV as any}>{r.responseStatus ?? "-"}</Badge>
+                {props.onTogglePin && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e: React.MouseEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      props.onTogglePin?.(r);
+                    }}
+                    disabled={!pinned && props.canPinMore === false}
+                    aria-label={pinned ? "Unpin" : "Pin"}
+                    title={pinned ? "Unpin" : "Pin for compare"}
+                  >
+                    {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                  </Button>
                 )}
               </div>
-              <div className="mono" style={{ textAlign: "right", color: "var(--muted)" }}>
-                {typeof r.duration === "number" ? `${r.duration}ms` : "-"}
-              </div>
-            </div>
-          </button>
-        );
-      })}
+            </button>
+          );
+        })
+      )}
     </div>
   );
 }

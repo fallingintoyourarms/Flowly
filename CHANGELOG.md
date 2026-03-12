@@ -22,6 +22,15 @@ The format is based on Keep a Changelog.
 - Fix Node.js ESM runtime by adding explicit `.js` extensions to internal relative imports.
 - Improve WebSocket debugging by capturing and displaying WebSocket frames.
 
+## [Unreleased]
+
+### Added
+
+- Tailwind CSS foundation for the UI (Tailwind layers + theme tokens).
+- shadcn-style UI primitives (Button, Input, Card, Badge, Tabs, Tooltip).
+- UI navigation tabs (Requests / Analytics / Settings) as part of the ongoing dashboard redesign.
+- UI-specific TypeScript config `ui/tsconfig.json` for Vite/editor resolution.
+
 ## [0.1.5] - 2026-03-10
 
 ### Added

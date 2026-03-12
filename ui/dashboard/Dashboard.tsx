@@ -2,6 +2,13 @@ import React from "react";
 import type { CapturedRequest } from "../../types/capturedRequest.js";
 import { RequestList } from "./components/RequestList.js";
 import { RequestDetails } from "./components/RequestDetails.js";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../src/components/ui/tabs.js";
+import { Badge } from "../src/components/ui/badge.js";
+import { Button } from "../src/components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../src/components/ui/card.js";
+import { Input } from "../src/components/ui/input.js";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../src/components/ui/tooltip.js";
+import { Github, Settings, Activity, List, Pause, Trash2, Send, Upload } from "lucide-react";
 
 async function fetchRequests(): Promise<CapturedRequest[]> {
   const res = await fetch("/api/requests");
@@ -186,6 +193,7 @@ export function Dashboard() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [paused, setPaused] = React.useState(false);
   const [live, setLive] = React.useState(false);
+  const [tab, setTab] = React.useState<"requests" | "analytics" | "settings">("requests");
 
   const [compareAId, setCompareAId] = React.useState<string | null>(null);
   const [compareBId, setCompareBId] = React.useState<string | null>(null);
@@ -323,209 +331,267 @@ export function Dashboard() {
   }, [hasActiveFilter, refreshQuery, refreshRequests]);
 
   return (
-    <div style={{ display: "grid", gridTemplateRows: "1fr auto", height: "100vh" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "430px 1fr", minHeight: 0 }}>
-        <div style={{ borderRight: "1px solid var(--border)", background: "var(--panel)" }}>
-          <div className="topbar">
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ fontWeight: 900, letterSpacing: 0.4 }}>Flowly</div>
-              <span className={`badge ${live ? "badge--ok" : "badge--err"}`}>{live ? "live" : "offline"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+    <TooltipProvider>
+      <div className="h-full bg-background">
+        <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border bg-card shadow-soft/10">
+                <Activity className="h-5 w-5 text-muted-foreground" />
+              </div>
               <div>
-                <div className="titleRow">
-                  <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>Flowly</div>
-                  <span className={`badge ${live ? "badge--ok" : "badge--warn"}`}>{live ? "live" : "offline"}</span>
-                  <span className="badge">{items.length}</span>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold tracking-tight">Flowly</div>
+                  <Badge variant={live ? "success" : "danger"}>{live ? "live" : "offline"}</Badge>
+                  <Badge variant="muted">{items.length}</Badge>
                 </div>
-                <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Local API traffic debugger</div>
+                <div className="text-xs text-muted-foreground">Local API traffic debugger</div>
               </div>
-              <div className="toolbar">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="application/json"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void importTraceFromFile(f);
-                    e.currentTarget.value = "";
-                  }}
-                />
+            </div>
 
-                <button className="button" onClick={() => fileRef.current?.click()}>
-                  Import JSON
-                </button>
-                <div className="toolbarGroup">
-                  <label style={{ color: "var(--muted)", fontSize: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={paused}
-                      onChange={(e) => void togglePaused(e.target.checked)}
-                    />
-                    Pause
-                  </label>
-                  <button className="button" onClick={() => void clearAll()}>
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant={paused ? "secondary" : "outline"} size="sm" onClick={() => void togglePaused(!paused)}>
+                    <Pause className="h-4 w-4" />
+                    {paused ? "Paused" : "Pause"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Toggle live capture</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={() => void clearAll()}>
+                    <Trash2 className="h-4 w-4" />
                     Clear
-                  </button>
-                  <button className="button" onClick={() => void sendTestRequestThroughProxy()}>
-                    Send test request
-                  </button>
-                </div>
-              </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Clear captured requests</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={() => void sendTestRequestThroughProxy()}>
+                    <Send className="h-4 w-4" />
+                    Test
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Send test request through proxy</TooltipContent>
+              </Tooltip>
+
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importTraceFromFile(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => fileRef.current?.click()} aria-label="Import JSON">
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Import JSON trace</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a href="https://github.com/fallingintoyourarms/Flowly" target="_blank" rel="noreferrer">
+                    <Button variant="outline" size="icon" aria-label="GitHub">
+                      <Github className="h-4 w-4" />
+                    </Button>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>Open GitHub</TooltipContent>
+              </Tooltip>
             </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-              <select
-                value={filterMethod}
-                onChange={(e) => setFilterMethod(e.target.value)}
-                style={{ background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-              >
-                <option value="">All methods</option>
-                {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                value={filterStatusMin}
-                onChange={(e) => setFilterStatusMin(e.target.value)}
-                placeholder="Status min"
-                style={{ width: 110, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-              />
-              <input
-                value={filterStatusMax}
-                onChange={(e) => setFilterStatusMax(e.target.value)}
-                placeholder="Status max"
-                style={{ width: 110, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-              />
-              <input
-                value={filterQ}
-                onChange={(e) => setFilterQ(e.target.value)}
-                placeholder="Keyword"
-                style={{ flex: "1 1 140px", minWidth: 140, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-              />
-              <input
-                value={filterRegex}
-                onChange={(e) => setFilterRegex(e.target.value)}
-                placeholder="Regex"
-                style={{ flex: "1 1 160px", minWidth: 160, background: "var(--panel2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}
-              />
-
-              <button className="button" onClick={onResetFilters}>
-                Reset
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, color: "var(--muted)", fontSize: 12 }}>
-              <span className="badge">rps: {analytics ? analytics.rps.toFixed(2) : "-"}</span>
-              <span className="badge">avg: {analytics?.avgResponseMs !== null && analytics?.avgResponseMs !== undefined ? `${Math.round(analytics.avgResponseMs)}ms` : "-"}</span>
-              <span className="badge">4xx: {analytics ? analytics.statusCounts["4xx"] ?? 0 : "-"}</span>
-              <span className="badge">5xx: {analytics ? analytics.statusCounts["5xx"] ?? 0 : "-"}</span>
-              {hasActiveFilter && <span className="badge">filtered</span>}
-            </div>
-
-            {analytics && (
-              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <StatusDistribution analytics={analytics} />
-                <LatencyHistogram analytics={analytics} />
-              </div>
-            )}
           </div>
-          <RequestList
-            items={items}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            pinnedIds={pinnedIds}
-            canPinMore={canPinMore}
-            onTogglePin={onTogglePin}
-          />
+
+          <div className="mx-auto max-w-[1600px] px-4 pb-3">
+            <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+              <TabsList>
+                <TabsTrigger value="requests">
+                  <List className="mr-2 h-4 w-4" />
+                  Requests
+                </TabsTrigger>
+                <TabsTrigger value="analytics">
+                  <Activity className="mr-2 h-4 w-4" />
+                  Analytics
+                </TabsTrigger>
+                <TabsTrigger value="settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
 
-        <div style={{ background: "var(--bg)" }}>
-          {compareA && compareB ? (
-            <div style={{ height: "100vh", overflow: "auto" }}>
-              <div
-                style={{
-                  padding: 16,
-                  borderBottom: "1px solid var(--border)",
-                  background: "var(--panel)",
-                  position: "sticky",
-                  top: 0,
-                  zIndex: 5
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>Compare</div>
-                    <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
-                      <span className="badge">A: {compareA.method} {compareA.path}</span>
-                      <span style={{ marginLeft: 8 }} className="badge">B: {compareB.method} {compareB.path}</span>
-                    </div>
+        <div className="mx-auto grid h-[calc(100vh-124px)] max-w-[1600px] grid-cols-[460px_1fr] gap-4 px-4 py-4">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="contents">
+            <TabsContent value="requests" className="contents">
+              <Card className="flex min-h-0 flex-col overflow-hidden">
+                <CardHeader className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Capture</CardTitle>
+                    <Button variant="ghost" size="sm" onClick={onResetFilters}>
+                      Reset
+                    </Button>
                   </div>
-                  <div className="toolbar">
-                    <button
-                      className="button"
-                      onClick={() => {
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={filterMethod}
+                      onChange={(e) => setFilterMethod(e.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="">All methods</option>
+                      {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <Input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Keyword" />
+                    <Input value={filterStatusMin} onChange={(e) => setFilterStatusMin(e.target.value)} placeholder="Status min" />
+                    <Input value={filterStatusMax} onChange={(e) => setFilterStatusMax(e.target.value)} placeholder="Status max" />
+                  </div>
+                  <Input value={filterRegex} onChange={(e) => setFilterRegex(e.target.value)} placeholder="Regex" />
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="muted">rps: {analytics ? analytics.rps.toFixed(2) : "-"}</Badge>
+                    <Badge variant="muted">avg: {analytics?.avgResponseMs !== null && analytics?.avgResponseMs !== undefined ? `${Math.round(analytics.avgResponseMs)}ms` : "-"}</Badge>
+                    <Badge variant="warn">4xx: {analytics ? analytics.statusCounts["4xx"] ?? 0 : "-"}</Badge>
+                    <Badge variant="danger">5xx: {analytics ? analytics.statusCounts["5xx"] ?? 0 : "-"}</Badge>
+                    {hasActiveFilter && <Badge variant="secondary">filtered</Badge>}
+                  </div>
+                </CardHeader>
+                <CardContent className="min-h-0 p-0">
+                  <div className="h-full overflow-auto">
+                    <RequestList
+                      items={items}
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      pinnedIds={pinnedIds}
+                      canPinMore={canPinMore}
+                      onTogglePin={onTogglePin}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="min-h-0 overflow-hidden rounded-xl border bg-card">
+                {compareA && compareB ? (
+                  <div className="h-full overflow-auto p-4">
+                    <div className="mb-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold">Compare</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          A: {compareA.method} {compareA.path} · B: {compareB.method} {compareB.path}
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => {
                         setCompareAId(null);
                         setCompareBId(null);
-                      }}
-                    >
-                      Clear compare
-                    </button>
+                      }}>
+                        Clear compare
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>A</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Request headers</div>
+                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 text-xs">{JSON.stringify(compareA.rawHeaders ?? compareA.headers ?? {}, null, 2)}</pre>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Request body</div>
+                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 text-xs">{compareA.body || "(empty)"}</pre>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Response</div>
+                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 text-xs">{compareA.responseBody || "(empty)"}</pre>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>B</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Request headers</div>
+                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 text-xs">{JSON.stringify(compareB.rawHeaders ?? compareB.headers ?? {}, null, 2)}</pre>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Request body</div>
+                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 text-xs">{compareB.body || "(empty)"}</pre>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Response</div>
+                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 text-xs">{compareB.responseBody || "(empty)"}</pre>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="h-full overflow-auto">
+                    <RequestDetails request={selected ?? null} onReplayed={onReplayed} />
+                  </div>
+                )}
               </div>
+            </TabsContent>
 
-              <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div>
-                  <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>A</div>
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
-                  <div className="code">{JSON.stringify(compareA.rawHeaders ?? compareA.headers ?? {}, null, 2)}</div>
-                  <div style={{ height: 12 }} />
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
-                  <div className="code">{compareA.body || "(empty)"}</div>
-                  <div style={{ height: 12 }} />
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
-                  <div className="code">{compareA.responseBody || "(empty)"}</div>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 800, letterSpacing: 0.2, marginBottom: 10 }}>B</div>
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request headers</div>
-                  <div className="code">{JSON.stringify(compareB.rawHeaders ?? compareB.headers ?? {}, null, 2)}</div>
-                  <div style={{ height: 12 }} />
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Request body</div>
-                  <div className="code">{compareB.body || "(empty)"}</div>
-                  <div style={{ height: 12 }} />
-                  <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Response</div>
-                  <div className="code">{compareB.responseBody || "(empty)"}</div>
-                </div>
+            <TabsContent value="analytics" className="col-span-2">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Status Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {analytics ? <StatusDistribution analytics={analytics} /> : <div className="text-sm text-muted-foreground">No analytics yet.</div>}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Latency Histogram</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {analytics ? <LatencyHistogram analytics={analytics} /> : <div className="text-sm text-muted-foreground">No analytics yet.</div>}
+                  </CardContent>
+                </Card>
               </div>
-            </div>
-          ) : (
-            <RequestDetails request={selected ?? null} onReplayed={onReplayed} />
-          )}
+            </TabsContent>
+
+            <TabsContent value="settings" className="col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Settings</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <div>UI is now running Tailwind + shadcn-style components.</div>
+                  <div>Proxy listens on :9090 and API on :9091 (see CLI output).</div>
+                  <div>GitHub: https://github.com/fallingintoyourarms/Flowly</div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
-
-      <div
-        style={{
-          borderTop: "1px solid var(--border)",
-          background: "var(--panel)",
-          padding: "10px 14px",
-          fontSize: 12,
-          color: "var(--muted)",
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12
-        }}
-      >
-        <div>Flowly 2026</div>
-        <a href="https://github.com/fallingintoyourarms/Flowly" target="_blank" rel="noreferrer">github.com/fallingintoyourarms/Flowly</a>
-      </div>
-    </div>
+    </TooltipProvider>
   );
 }
+
+export default Dashboard;

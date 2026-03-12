@@ -10,50 +10,14 @@ You route traffic through Flowly:
 
 - Frontend → **Flowly Proxy** → Backend API
 
-Flowly captures:
+Flowly captures HTTP and WebSocket traffic (method/path/headers/bodies/timing) and renders it in a DevTools-inspired dashboard.
 
-- HTTP method + path
-- request headers + body
-- response status + headers + body
-- response time
+> [!CAUTION]
+> Flowly captures request/response bodies and headers. These can contain secrets (cookies, tokens, API keys) and PII.
 
-…and displays everything in a clean dashboard (inspired by the browser DevTools network panel).
+## Quickstart
 
-## Features
-
-- **Local proxy** (default `http://localhost:9090`) with request/response capture
-- **In-memory storage** (no database)
-- **Dashboard API** (default `http://localhost:9091`) for the UI
-- **React dashboard** (Vite dev server at `http://localhost:5173`)
-- **Request replay** from the dashboard
-
-## Project structure
-
-```
-flowly/
-  core/
-    proxyServer.ts
-    requestCapture.ts
-    responseCapture.ts
-  storage/
-    memoryStore.ts
-  server/
-    apiServer.ts
-  ui/
-    dashboard/
-    components/
-  cli/
-    start.ts
-  types/
-    capturedRequest.ts
-```
-
-## Requirements
-
-- Node.js 18+ (Flowly uses modern Node APIs)
-- npm
-
-## Install
+### 1) Install deps
 
 From the repo root:
 
@@ -61,86 +25,90 @@ From the repo root:
 npm install
 ```
 
-## Usage
-
-### Start Flowly (dev mode)
-
-This starts:
-
-- Proxy server (default `9090`)
-- Internal API server (default `9091`)
-- Dashboard UI dev server (default `5173`)
+### 2) Start the UI (Vite)
 
 ```bash
+cd ui
+npm install
 npm run dev
 ```
 
-Open the dashboard:
+Open:
 
 - http://localhost:5173
 
-### Start Flowly via CLI
+> [!NOTE]
+> The UI dev server proxies `/api/*` to Flowly’s internal API (`http://127.0.0.1:9091`) via `ui/vite.config.ts`.
+
+### 3) Start Flowly (proxy + API)
 
 ```bash
-npx tsx ./cli/start.ts start --target http://localhost:3000 --port 9090 --apiPort 9091
+npx tsx ./cli/start.ts start --target http://127.0.0.1:3000 --port 9090 --apiPort 9091
 ```
 
-Options:
+> [!IMPORTANT]
+> `--target` must be a valid URL (for example `http://127.0.0.1:3000`). Placeholders like `http://127.0.0.1:XXXX` will not work.
 
-- `--target` (required): target API base URL (ex: `http://localhost:3000`)
-- `--port` (optional): proxy listen port (default `9090`)
-- `--apiPort` (optional): internal dashboard API port (default `9091`)
+Now configure your frontend to call the proxy:
 
-### Configure your frontend
+- Backend API: `http://127.0.0.1:3000`
+- Flowly proxy: `http://127.0.0.1:9090`
 
-Point your frontend API base URL to Flowly instead of the backend.
+So your frontend calls:
 
-Example:
+- `http://127.0.0.1:9090/users`
 
-- backend API: `http://localhost:3000`
-- flowly proxy: `http://localhost:9090`
+Flowly forwards the request to:
 
-So your frontend should call:
+- `http://127.0.0.1:3000/users`
 
-- `http://localhost:9090/users`
+## Features
 
-and Flowly will forward the request to:
+- Capture HTTP requests/responses (headers + bodies + timing)
+- WebSocket upgrade detection and frame capture
+- Request replay (original + modified)
+- Request filtering + search + regex query
+- Analytics (RPS, status distribution, latency histogram)
+- Export/import traces
+- Side-by-side comparison (pin two requests)
 
-- `http://localhost:3000/users`
+## Architecture
 
-## Request replay
+High-level components:
 
-In the dashboard, select a request and click **Replay Request**.
+- **Proxy** (`core/`): intercepts and forwards requests
+- **Internal API** (`server/`): serves captured requests + analytics + replay endpoints
+- **Storage** (`storage/`): in-memory store + event subscriptions
+- **UI** (`ui/`): Vite + React dashboard
 
-Flowly will:
+Repository layout:
 
-- resend the original request to the same target URL
-- store it as a new captured request
+```
+flowly/
+  core/
+  storage/
+  server/
+  ui/
+  cli/
+  types/
+```
+
+## Security & privacy
+
+> [!WARNING]
+> Avoid sharing raw traces in public issues/PRs. Even masked headers may still expose sensitive data via bodies, URLs, or screenshots.
 
 ## Troubleshooting
 
-### Dashboard shows `ECONNREFUSED 127.0.0.1:9091`
+### UI shows `ECONNREFUSED 127.0.0.1:9091`
 
-This means the UI can’t reach Flowly’s internal API.
-
-Check:
-
-- Is the API server running on `9091`?
-- Are you using a different `--apiPort`?
-
-The UI dev server proxies `/api/*` to `http://127.0.0.1:9091` (see `ui/vite.config.ts`). If you change `--apiPort`, update the Vite proxy target accordingly.
+- Confirm Flowly API is running on `9091`
+- If you changed `--apiPort`, update `ui/vite.config.ts` accordingly
 
 ### Port already in use (`EADDRINUSE`)
 
-Another process is already using the port (ex: `9090`). Stop it or choose a different port:
-
 ```bash
-npx tsx ./cli/start.ts start --target http://localhost:3000 --port 9092 --apiPort 9093
+npx tsx ./cli/start.ts start --target http://127.0.0.1:3000 --port 9092 --apiPort 9093
 ```
 
 Then update the Vite proxy target to `9093`.
-
-## Notes
-
-- Storage is **in-memory** (restarting Flowly clears captured requests)
-- Flowly is intentionally minimal and focused on readability and a clean architecture

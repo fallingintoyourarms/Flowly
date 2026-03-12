@@ -31,6 +31,9 @@ The format is based on Keep a Changelog.
 - UI navigation tabs (Requests / Analytics / Settings) as part of the ongoing dashboard redesign.
 - UI-specific TypeScript config `ui/tsconfig.json` for Vite/editor resolution.
 
+> [!NOTE]
+> The UI is actively being redesigned. Expect rapid iteration on layout and component structure until the Tailwind/shadcn rewrite stabilizes.
+
 ## [0.1.5] - 2026-03-10
 
 ### Added

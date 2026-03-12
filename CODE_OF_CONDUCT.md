@@ -1,6 +1,6 @@
 # Code of Conduct
 
-Flowly follows a simple, contributor-friendly code of conduct.
+Flowly is built by and for developers. We want this project to be welcoming, collaborative, and safe.
 
 ## Our pledge
 
@@ -25,4 +25,10 @@ Project maintainers may remove, edit, or reject contributions that do not align 
 
 ## Reporting
 
-If you experience or witness unacceptable behavior, please report it by opening a private message to the maintainers (or, if not possible, by creating an issue with minimal details and requesting private follow-up).
+If you experience or witness unacceptable behavior:
+
+- Prefer a private report to the maintainers, or
+- If that’s not possible, create an issue with minimal details and request private follow-up.
+
+> [!WARNING]
+> If a report includes sensitive information, avoid posting it publicly.

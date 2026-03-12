@@ -1,11 +1,11 @@
 # Contributing to Flowly
 
-Thanks for contributing! Flowly is meant to be a **clean, minimal devtool**:
+Thanks for contributing! Flowly aims to stay a **clean, minimal devtool**:
 
-- clear architecture
-- readable TypeScript
-- small, focused modules
-- simple UI (no heavy frameworks)
+- Clear architecture
+- Readable TypeScript
+- Small, focused modules
+- Practical UI (fast, minimal dependencies)
 
 ## Development setup
 
@@ -17,6 +17,9 @@ npm run dev
 - UI: http://localhost:5173
 - Proxy (default): http://localhost:9090
 - Dashboard API (default): http://localhost:9091
+
+> [!IMPORTANT]
+> The UI runs as a separate Vite app in `ui/`. If you’re only changing UI code, you can run `npm run dev` in `ui/` directly.
 
 ## Repository layout
 
@@ -52,6 +55,12 @@ Flowly currently relies on manual testing:
 - Start Flowly with `--target http://localhost:3000`
 - Send requests through the proxy (`http://localhost:9090`)
 - Verify requests show in the dashboard and replay works
+
+> [!CAUTION]
+> Captured traces can include secrets/PII. Avoid attaching raw traces to public issues.
+
+> [!TIP]
+> When reporting a UI bug, include a screenshot plus browser console logs (redacted if necessary).
 
 ## Reporting issues
 

@@ -89,7 +89,8 @@ export class SqliteStore {
         sessionId TEXT,
         sessionTagsJson TEXT,
         anomaliesJson TEXT,
-        connectionKey TEXT
+        connectionKey TEXT,
+        annotationsJson TEXT
       );
 
       CREATE TABLE IF NOT EXISTS sessions (
@@ -108,6 +109,11 @@ export class SqliteStore {
     // Best-effort additive migration for older DBs
     try {
       this.db.exec("ALTER TABLE requests ADD COLUMN connectionKey TEXT");
+    } catch {
+      // ignore
+    }
+    try {
+      this.db.exec("ALTER TABLE requests ADD COLUMN annotationsJson TEXT");
     } catch {
       // ignore
     }
@@ -151,7 +157,8 @@ export class SqliteStore {
           isWebSocket, wsFramesJson,
           graphqlJson, grpcJson,
           sessionId, sessionTagsJson, anomaliesJson,
-          connectionKey
+          connectionKey,
+          annotationsJson
         ) VALUES (
           @id, @timestamp, @method, @path, @targetUrl, @protocol, @contentType, @duration, @responseStatus,
           @headersJson, @rawHeadersJson, @body,
@@ -159,7 +166,8 @@ export class SqliteStore {
           @isWebSocket, @wsFramesJson,
           @graphqlJson, @grpcJson,
           @sessionId, @sessionTagsJson, @anomaliesJson,
-          @connectionKey
+          @connectionKey,
+          @annotationsJson
         )
         ON CONFLICT(id) DO UPDATE SET
           timestamp = excluded.timestamp,
@@ -183,7 +191,8 @@ export class SqliteStore {
           sessionId = excluded.sessionId,
           sessionTagsJson = excluded.sessionTagsJson,
           anomaliesJson = excluded.anomaliesJson,
-          connectionKey = excluded.connectionKey
+          connectionKey = excluded.connectionKey,
+          annotationsJson = excluded.annotationsJson
         `
       )
       .run({
@@ -214,7 +223,8 @@ export class SqliteStore {
         sessionId: r.sessionId ?? null,
         sessionTagsJson: safeJsonStringify(r.sessionTags ?? null),
         anomaliesJson: safeJsonStringify(r.anomalies ?? null),
-        connectionKey: r.connectionKey ?? null
+        connectionKey: r.connectionKey ?? null,
+        annotationsJson: safeJsonStringify((r as any).annotations ?? null)
       });
 
     if (r.sessionId) {
@@ -349,7 +359,9 @@ export class SqliteStore {
 
       sessionId: row.sessionId ? String(row.sessionId) : undefined,
       sessionTags: safeJsonParse<string[]>(row.sessionTagsJson) ?? undefined,
-      anomalies: safeJsonParse<any[]>(row.anomaliesJson) as any
+      anomalies: safeJsonParse<any[]>(row.anomaliesJson) as any,
+      connectionKey: row.connectionKey ? String(row.connectionKey) : undefined,
+      annotations: safeJsonParse<any[]>(row.annotationsJson) as any
     };
   }
 }

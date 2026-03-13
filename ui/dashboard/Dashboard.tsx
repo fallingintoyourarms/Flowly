@@ -9,7 +9,7 @@ import { Button } from "../src/components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../src/components/ui/card.js";
 import { Input } from "../src/components/ui/input.js";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../src/components/ui/tooltip.js";
-import { Github, Settings, Activity, List, Pause, Trash2, Send, Upload, Gauge } from "lucide-react";
+import { Github, Settings, Activity, List, Pause, Trash2, Send, Upload, Gauge, Share2 } from "lucide-react";
 
 async function fetchRequests(): Promise<CapturedRequest[]> {
   const res = await fetch("/api/requests");
@@ -18,6 +18,16 @@ async function fetchRequests(): Promise<CapturedRequest[]> {
 
 async function sendTestRequestThroughProxy(): Promise<void> {
   await fetch("/api/send-test", { method: "POST" });
+}
+
+async function exportShareReport(sessionId: string): Promise<void> {
+  const url = `/api/share/export.json?sessionId=${encodeURIComponent(sessionId)}`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "flowly-share-export.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 type AnalyticsOverview = {
@@ -280,6 +290,21 @@ export function Dashboard() {
     await fetch("/api/clear", { method: "POST" });
   }, []);
 
+  const onShareExport = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions/current");
+      const json = await res.json();
+      const sessionId = typeof json?.sessionId === "string" ? json.sessionId : null;
+      if (!sessionId) {
+        alert("No current session available");
+        return;
+      }
+      await exportShareReport(sessionId);
+    } catch {
+      alert("Failed to export share report");
+    }
+  }, []);
+
   const selected = React.useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
   const compareA = React.useMemo(() => items.find((i) => i.id === compareAId) ?? null, [items, compareAId]);
   const compareB = React.useMemo(() => items.find((i) => i.id === compareBId) ?? null, [items, compareBId]);
@@ -359,6 +384,16 @@ export function Dashboard() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Toggle live capture</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={() => void onShareExport()}>
+                    <Share2 className="h-4 w-4" />
+                    Share Export
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Download an anonymized share report for the current session</TooltipContent>
               </Tooltip>
 
               <Tooltip>

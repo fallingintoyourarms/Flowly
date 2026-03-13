@@ -160,6 +160,8 @@ export function RequestDetails(props: {
   const [wsQuery, setWsQuery] = React.useState("");
   const [wsDir, setWsDir] = React.useState<"all" | "client" | "server">("all");
   const [wsType, setWsType] = React.useState<"all" | "text" | "binary" | "ping" | "pong" | "close">("all");
+  const [noteText, setNoteText] = React.useState("");
+  const [noteBusy, setNoteBusy] = React.useState(false);
 
   React.useEffect(() => {
     if (!r) return;
@@ -174,7 +176,55 @@ export function RequestDetails(props: {
     setWsType("all");
     setResolvedWsConn(null);
     setWsConnError(null);
+    setNoteText("");
+    setNoteBusy(false);
   }, [r?.id, revealSensitive]);
+
+  const addNote = React.useCallback(async () => {
+    if (!r) return;
+    const text = noteText.trim();
+    if (!text) return;
+    setNoteBusy(true);
+    try {
+      const res = await fetch(`/api/requests/${encodeURIComponent(r.id)}/annotations`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      const json = await res.json();
+      if (json?.ok && Array.isArray(json?.annotations)) {
+        // Annotations are stored on the request model; the SSE update will keep list in sync.
+        setNoteText("");
+      } else {
+        alert(json?.error ?? "Failed to add note");
+      }
+    } catch {
+      alert("Failed to add note");
+    } finally {
+      setNoteBusy(false);
+    }
+  }, [r?.id, noteText]);
+
+  const deleteNote = React.useCallback(
+    async (annotationId: string) => {
+      if (!r) return;
+      setNoteBusy(true);
+      try {
+        const res = await fetch(`/api/requests/${encodeURIComponent(r.id)}/annotations/${encodeURIComponent(annotationId)}`, {
+          method: "DELETE"
+        });
+        const json = await res.json();
+        if (!json?.ok) {
+          alert(json?.error ?? "Failed to delete note");
+        }
+      } catch {
+        alert("Failed to delete note");
+      } finally {
+        setNoteBusy(false);
+      }
+    },
+    [r?.id]
+  );
 
   React.useEffect(() => {
     if (!r?.isWebSocket || !r.connectionKey) return;
@@ -379,6 +429,40 @@ export function RequestDetails(props: {
         </div>
 
         <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-sm">Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add a note…" />
+                <Button variant="secondary" size="sm" disabled={noteBusy || noteText.trim().length === 0} onClick={() => void addNote()}>
+                  Add
+                </Button>
+              </div>
+              {(r.annotations ?? []).length === 0 ? (
+                <div className="text-sm text-muted-foreground">No notes yet</div>
+              ) : (
+                <div className="space-y-2">
+                  {(r.annotations ?? [])
+                    .slice()
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map((a) => (
+                      <div key={a.id} className="flex items-start justify-between gap-3 rounded-md border bg-muted/20 p-2">
+                        <div className="min-w-0">
+                          <div className="text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleString()}</div>
+                          <div className="mt-1 whitespace-pre-wrap break-words text-sm">{a.text}</div>
+                        </div>
+                        <Button variant="ghost" size="sm" disabled={noteBusy} onClick={() => void deleteNote(a.id)}>
+                          Delete
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {Array.isArray(r.anomalies) && r.anomalies.length > 0 && (
             <Card className="lg:col-span-2">
               <CardHeader>

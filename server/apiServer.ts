@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import cors from "cors";
 import type { CapturedRequest } from "../types/capturedRequest.js";
 import { memoryStore } from "../storage/memoryStore.js";
@@ -34,6 +35,47 @@ function percentile(sorted: number[], p: number): number | null {
   if (sorted.length === 0) return null;
   const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))));
   return sorted[idx] ?? null;
+}
+
+function hashStable(input: string, salt: string): string {
+  const h = crypto.createHash("sha256");
+  h.update(salt);
+  h.update("\n");
+  h.update(input);
+  return h.digest("hex").slice(0, 16);
+}
+
+function redactHeaders(headers: Record<string, string> | undefined, salt: string): Record<string, string> {
+  const h = headers ?? {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(h)) {
+    const key = k.toLowerCase();
+    if (key === "authorization" || key === "cookie" || key === "set-cookie" || key.startsWith("x-api-key") || key.includes("token")) {
+      out[k] = `redacted:${hashStable(v ?? "", salt)}`;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function scrubText(text: string | undefined, salt: string): string | undefined {
+  if (!text) return text;
+  // Best-effort: avoid leaking raw values; keep length-ish info.
+  return `redacted:${hashStable(text, salt)} (len=${text.length})`;
+}
+
+function scrubUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    u.username = "";
+    u.password = "";
+    u.search = "";
+    return u.toString();
+  } catch {
+    return url.split("?")[0];
+  }
 }
 
 async function sendTestRequest(): Promise<{ ok: boolean; error?: string }> {
@@ -446,6 +488,44 @@ export function startApiServer(opts: ApiServerOptions) {
     res.json(item);
   });
 
+  app.get("/requests/:id/annotations", (req, res) => {
+    const item = memoryStore.get(req.params.id);
+    if (!item) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true, id: item.id, annotations: item.annotations ?? [] });
+  });
+
+  app.post("/requests/:id/annotations", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const item = memoryStore.get(req.params.id);
+    if (!item) return res.status(404).json({ error: "Not found" });
+
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) return res.status(400).json({ error: "text is required" });
+
+    const ann = { id: crypto.randomUUID(), createdAt: Date.now(), text };
+    const next = [...(item.annotations ?? []), ann];
+
+    memoryStore.update(item.id, { annotations: next });
+    const updated = memoryStore.get(item.id);
+    if (updated) opts.sqlite.upsertRequest(updated);
+
+    res.json({ ok: true, annotation: ann, annotations: next });
+  });
+
+  app.delete("/requests/:id/annotations/:annotationId", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const item = memoryStore.get(req.params.id);
+    if (!item) return res.status(404).json({ error: "Not found" });
+
+    const annotationId = String(req.params.annotationId);
+    const next = (item.annotations ?? []).filter((a) => a.id !== annotationId);
+    memoryStore.update(item.id, { annotations: next });
+    const updated = memoryStore.get(item.id);
+    if (updated) opts.sqlite.upsertRequest(updated);
+
+    res.json({ ok: true, annotations: next });
+  });
+
   app.post("/pause", (req, res) => {
     const paused = Boolean(req.body?.paused);
     memoryStore.setPaused(paused);
@@ -455,6 +535,54 @@ export function startApiServer(opts: ApiServerOptions) {
   app.post("/clear", (_req, res) => {
     memoryStore.clear();
     res.json({ ok: true });
+  });
+
+  app.get("/share/export.json", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+    const includeBodies = req.query.includeBodies === "true";
+    const includeHeaders = req.query.includeHeaders === "true";
+    const salt = typeof req.query.salt === "string" && req.query.salt.length > 0 ? req.query.salt : crypto.randomUUID();
+
+    const items = opts.sqlite
+      .queryRequests({ sessionId, limit: 5000 })
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map((r) => {
+        const anonId = `req_${hashStable(r.id, salt)}`;
+        return {
+          id: anonId,
+          timestamp: r.timestamp,
+          duration: r.duration ?? null,
+          method: r.method,
+          path: r.path,
+          protocol: r.protocol ?? "http",
+          targetUrl: scrubUrl(r.targetUrl),
+          responseStatus: r.responseStatus ?? null,
+          contentType: r.contentType ?? null,
+          headers: includeHeaders ? redactHeaders(r.headers, salt) : undefined,
+          responseHeaders: includeHeaders ? redactHeaders(r.responseHeaders ?? undefined, salt) : undefined,
+          body: includeBodies ? scrubText(r.body, salt) : undefined,
+          responseBody: includeBodies ? scrubText(r.responseBody, salt) : undefined,
+          anomalies: r.anomalies ?? []
+        };
+      });
+
+    const report = {
+      ok: true,
+      version: "share-v1",
+      generatedAt: Date.now(),
+      sessionId: `sess_${hashStable(sessionId, salt)}`,
+      saltHint: salt.slice(0, 8),
+      counts: { requests: items.length },
+      items
+    };
+
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.setHeader("content-disposition", "attachment; filename=flowly-share-export.json");
+    res.send(JSON.stringify(report, null, 2));
   });
 
   app.get("/websockets/by-connection", (req, res) => {

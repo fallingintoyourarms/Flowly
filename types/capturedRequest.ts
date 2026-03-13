@@ -44,6 +44,12 @@ export interface CapturedRequest {
   connectionKey?: string;
   wsFrames?: WebSocketFrame[];
 
+  annotations?: Array<{
+    id: string;
+    createdAt: number;
+    text: string;
+  }>;
+
   replayStatus?: "idle" | "running" | "succeeded" | "failed";
   replayedAt?: number;
   replayError?: string;

@@ -1,41 +1,43 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-This project is in early development. Only the latest `main` branch is supported.
+Flowly is under active development. Only the latest `main` branch is supported.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-If you discover a security vulnerability, please report it responsibly.
+If you believe you’ve found a security issue, please report it responsibly.
 
 > [!WARNING]
 > Do **not** open a public issue with exploit details.
 
-Preferred workflow:
+Recommended workflow:
 
-- Open a minimal issue requesting a private channel, or
-- Contact the maintainers directly if contact info is available.
+- Create a minimal issue that requests a private channel, or
+- Contact the maintainers directly (if contact info is available)
 
-Please include:
+Include:
 
-- a description of the issue
-- steps to reproduce
-- impact assessment (what an attacker could do)
-- any suggested fix
+- Description
+- Steps to reproduce
+- Impact (what an attacker could do)
+- Suggested fix/mitigation (if you have one)
 
-## Scope notes
+## Sensitive data & traces
 
-Flowly is a local developer tool that inspects HTTP traffic. Be careful when capturing:
+Flowly is a local tool that inspects HTTP and WebSocket traffic. Captured traces can include:
 
-- authorization headers
-- cookies
-- tokens
-- PII
-
-Captured data is stored in-memory only, but it may still be visible on-screen and in logs.
+- Authorization headers
+- Cookies / session identifiers
+- API keys / tokens
+- PII in request/response bodies
 
 > [!CAUTION]
-> Treat captured traces as sensitive. Don’t paste them into public issues, and avoid screen sharing while sensitive requests are visible.
+> Treat traces as secrets. Don’t paste them into public issues/PRs, and be careful when screen sharing.
 
-> [!TIP]
-> If you need to share a trace with maintainers, redact tokens and remove bodies that contain PII before sending.
+> [!IMPORTANT]
+> Flowly can persist traces locally via SQLite (default `./.flowly/traces.db`). Protect your machine/user account accordingly and avoid committing local trace databases.
+
+## Out of scope
+
+Because Flowly runs locally and only proxies traffic you direct to it, issues in your upstream services (target APIs) are out of scope unless Flowly directly causes the impact.

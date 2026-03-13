@@ -1,72 +1,72 @@
-# Contributing to Flowly
+# Contributing
 
-Thanks for contributing! Flowly aims to stay a **clean, minimal devtool**:
+Thanks for contributing to Flowly.
 
-- Clear architecture
-- Readable TypeScript
-- Small, focused modules
-- Practical UI (fast, minimal dependencies)
+## Project goals
 
-## Development setup
+- Keep the proxy/capture pipeline understandable
+- Prefer simple building blocks over heavy abstraction
+- Make debugging UX fast and readable
+
+> [!IMPORTANT]
+> Flowly captures traffic that may include secrets/PII. Avoid attaching raw traces to public issues.
+
+## Development
+
+From repo root:
 
 ```bash
 npm install
 npm run dev
 ```
 
+Defaults:
+
 - UI: http://localhost:5173
-- Proxy (default): http://localhost:9090
-- Dashboard API (default): http://localhost:9091
+- Proxy: http://localhost:9090
+- API: http://localhost:9091
 
-> [!IMPORTANT]
-> The UI runs as a separate Vite app in `ui/`. If you’re only changing UI code, you can run `npm run dev` in `ui/` directly.
+UI-only:
 
-## Repository layout
+```bash
+cd ui
+npm install
+npm run dev
+```
 
-- `core/`: proxy + capture pipeline
-- `storage/`: in-memory store
-- `server/`: internal API for the dashboard
-- `ui/`: React + Vite dashboard
+## Repo layout
+
+- `core/`: proxy server + capture pipeline
+- `server/`: internal API used by the UI
+- `storage/`: in-memory store + SQLite persistence
+- `ui/`: Vite + React dashboard
 - `cli/`: CLI entrypoint
-- `types/`: shared TypeScript interfaces
+- `types/`: shared types
 
-## Coding standards
+## Pull requests
 
-- TypeScript everywhere
-- Prefer small, composable functions over large files
-- Keep modules focused (single responsibility)
-- Avoid unnecessary abstractions
-- Add **helpful** comments, especially for proxy/capture behavior
+Please include:
 
-## Pull request guidelines
+- What changed
+- Why
+- How you tested
 
-- Keep PRs small and focused
-- Include a short description of:
-  - what changed
-  - why it changed
-  - how to test
-- If you add a feature, update `README.md` and `CHANGELOG.md`
+If you add a user-facing change, update:
 
-## Testing
+- `CHANGELOG.md`
+- `README.md`
 
-Flowly currently relies on manual testing:
+## Testing checklist
 
-- Start a sample backend API (ex: `http://localhost:3000`)
-- Start Flowly with `--target http://localhost:3000`
-- Send requests through the proxy (`http://localhost:9090`)
-- Verify requests show in the dashboard and replay works
-
-> [!CAUTION]
-> Captured traces can include secrets/PII. Avoid attaching raw traces to public issues.
+- Start a sample backend API (example: `http://127.0.0.1:3000`)
+- Start Flowly with `--target http://127.0.0.1:3000`
+- Send traffic through the proxy (`http://127.0.0.1:9090`)
+- Verify:
+  - Requests appear in the UI
+  - Replay works (original + modified)
+  - WebSocket frames appear for WS traffic
+  - Sessions: tag current session + replay a session
+  - History query works (`GET /requests/history`)
 
 > [!TIP]
-> When reporting a UI bug, include a screenshot plus browser console logs (redacted if necessary).
-
-## Reporting issues
-
-When filing a bug, include:
-
-- your OS + Node version
-- command you ran (and ports)
-- minimal repro steps
-- any relevant console output (server + browser)
+> When reporting a UI issue, include a screenshot plus browser console logs (redacted if necessary).

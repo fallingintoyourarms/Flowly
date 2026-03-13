@@ -1,34 +1,29 @@
 # Code of Conduct
 
-Flowly is built by and for developers. We want this project to be welcoming, collaborative, and safe.
+Flowly is a community project. We want participation to be welcoming, collaborative, and safe.
 
-## Our pledge
+## Our standards
 
-We pledge to make participation in this project a harassment-free experience for everyone.
-
-## Expected behavior
+We expect contributors to:
 
 - Be respectful and constructive
 - Assume good intent
-- Focus on what’s best for the project and its users
-- Welcome questions and learning
+- Focus on technical discussion, not personal attacks
+- Be considerate when giving feedback
 
-## Unacceptable behavior
+Unacceptable behavior includes:
 
 - Harassment, discrimination, or personal attacks
-- Trolling, insulting/derogatory comments, or other unprofessional conduct
-- Publishing others’ private information
+- Trolling or deliberately disruptive behavior
+- Publishing someone else’s private information
 
-## Enforcement
+## Maintainer responsibility
 
-Project maintainers may remove, edit, or reject contributions that do not align with this Code of Conduct.
+Maintainers may remove, edit, or reject contributions that do not align with this Code of Conduct.
 
 ## Reporting
 
-If you experience or witness unacceptable behavior:
-
-- Prefer a private report to the maintainers, or
-- If that’s not possible, create an issue with minimal details and request private follow-up.
+If you experience or witness unacceptable behavior, report it to the maintainers.
 
 > [!WARNING]
-> If a report includes sensitive information, avoid posting it publicly.
+> If a report contains sensitive information, do not post it publicly. Share only minimal details and request private follow-up.

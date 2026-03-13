@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog.
 
+## [0.3.0] 2026-03-13
+
+### Added
+
+- Tailwind CSS foundation for the UI (Tailwind layers + theme tokens).
+- shadcn-style UI primitives (Button, Input, Card, Badge, Tabs, Tooltip).
+- UI navigation tabs (Requests / Analytics / Settings) as part of the ongoing dashboard redesign.
+- UI-specific TypeScript config `ui/tsconfig.json` for Vite/editor resolution.
+- SQLite trace persistence using `better-sqlite3` (default `./.flowly/traces.db`) with `--traceDb` and `--maxInMemory`.
+- Historical trace querying endpoint `GET /requests/history`.
+- Session management endpoints (start/list/tag/export) plus current-session tags endpoint.
+- Sequential session replay endpoint `POST /sessions/:id/replay` (oldest → newest).
+- Heuristic insights engine (latency anomalies, regression signals, error pattern changes, caching recommendations) persisted on requests.
+- Request details UI surfaces session metadata and insights.
+
+> [!NOTE]
+> The UI is actively being redesigned. Expect rapid iteration on layout and component structure until the Tailwind/shadcn rewrite stabilizes.
+
 ## [0.2.0] 2026-03-11
 
 ### Added
@@ -22,17 +40,6 @@ The format is based on Keep a Changelog.
 - Fix Node.js ESM runtime by adding explicit `.js` extensions to internal relative imports.
 - Improve WebSocket debugging by capturing and displaying WebSocket frames.
 
-## [Unreleased]
-
-### Added
-
-- Tailwind CSS foundation for the UI (Tailwind layers + theme tokens).
-- shadcn-style UI primitives (Button, Input, Card, Badge, Tabs, Tooltip).
-- UI navigation tabs (Requests / Analytics / Settings) as part of the ongoing dashboard redesign.
-- UI-specific TypeScript config `ui/tsconfig.json` for Vite/editor resolution.
-
-> [!NOTE]
-> The UI is actively being redesigned. Expect rapid iteration on layout and component structure until the Tailwind/shadcn rewrite stabilizes.
 
 ## [0.1.5] - 2026-03-10
 

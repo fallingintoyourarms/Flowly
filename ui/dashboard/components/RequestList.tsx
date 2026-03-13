@@ -44,8 +44,8 @@ export function RequestList(props: {
               key={r.id}
               onClick={() => props.onSelect(r.id)}
               className={
-                "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 " +
-                (active ? "bg-muted/40" : "")
+                "flex w-full items-center gap-3 px-4 py-3 text-left transition-[transform,box-shadow,background-color] duration-150 ease-out hover:bg-muted/30 hover:-translate-y-px hover:shadow-sm active:translate-y-0 " +
+                (active ? "bg-muted/40 shadow-sm" : "")
               }
             >
               <div className="w-14 shrink-0">

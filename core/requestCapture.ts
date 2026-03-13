@@ -86,7 +86,6 @@ export function captureRequest(
 
   const grpc = isGrpc
     ? (() => {
-        // Typical gRPC path: /package.Service/Method
         const p = req.url ?? "";
         const m = /^\/?([^/]+)\/?([^/]*)$/.exec(p);
         if (!m) return {};

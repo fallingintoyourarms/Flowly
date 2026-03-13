@@ -22,6 +22,15 @@ export interface CapturedRequest {
   protocol?: "http" | "websocket" | "graphql" | "graphql-subscription" | "grpc";
   contentType?: string;
 
+  sessionId?: string;
+  sessionTags?: string[];
+
+  anomalies?: Array<{
+    type: "latency" | "new_error_pattern" | "regression" | "cache_recommendation";
+    severity: "info" | "warning" | "critical";
+    message: string;
+  }>;
+
   graphql?: {
     operationType?: "query" | "mutation" | "subscription";
     operationName?: string;

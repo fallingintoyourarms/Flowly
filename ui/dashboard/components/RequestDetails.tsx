@@ -222,6 +222,10 @@ export function RequestDetails(props: {
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <Badge variant="muted">id: {r.id}</Badge>
+                {r.sessionId && <Badge variant="muted">session: {r.sessionId}</Badge>}
+                {Array.isArray(r.sessionTags) && r.sessionTags.length > 0 && (
+                  <Badge variant="secondary">tags: {r.sessionTags.join(", ")}</Badge>
+                )}
                 {proto && (
                   <Badge variant="secondary" className="gap-1">
                     {protoIcon(r.protocol)}
@@ -239,6 +243,12 @@ export function RequestDetails(props: {
                     variant={r.replayStatus === "running" ? "secondary" : r.replayStatus === "succeeded" ? "success" : "danger"}
                   >
                     replay: {r.replayStatus}
+                  </Badge>
+                )}
+                {Array.isArray(r.anomalies) && r.anomalies.length > 0 && (
+                  <Badge variant="warn" className="gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    insights: {r.anomalies.length}
                   </Badge>
                 )}
                 {r.replayedAt && <Badge variant="muted">replayed: {new Date(r.replayedAt).toLocaleTimeString()}</Badge>}
@@ -291,7 +301,31 @@ export function RequestDetails(props: {
           </div>
         </div>
 
-        <div className="grid gap-4 p-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
+          {Array.isArray(r.anomalies) && r.anomalies.length > 0 && (
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                  Insights
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  {r.anomalies.map((a, idx) => (
+                    <div key={idx} className="rounded-md border bg-muted/30 p-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={a.severity === "critical" ? "danger" : a.severity === "warning" ? "warn" : "secondary"}>
+                          {a.type}
+                        </Badge>
+                        <span className="text-muted-foreground">{a.message}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <div className="space-y-4">
             {(hints.length > 0 || r.replayError) && (
               <Card>

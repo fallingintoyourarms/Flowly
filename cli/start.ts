@@ -2,10 +2,12 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import fs from "node:fs";
+import path from "node:path";
 import { startProxyServer } from "../core/proxyServer.js";
 import { startApiServer } from "../server/apiServer.js";
 import { memoryStore } from "../storage/memoryStore.js";
 import type { CapturedRequest } from "../types/capturedRequest.js";
+import { SqliteStore } from "../storage/sqliteStore.js";
 
 // Simple ANSI color helpers
 const c = {
@@ -51,6 +53,16 @@ const argv = await yargs(hideBin(process.argv))
         type: "string",
         describe: "Persist captured requests to a JSON file"
       })
+      .option("traceDb", {
+        type: "string",
+        default: path.join(process.cwd(), ".flowly", "traces.db"),
+        describe: "Persist traces to a SQLite database file"
+      })
+      .option("maxInMemory", {
+        type: "number",
+        default: 500,
+        describe: "Max captured requests to keep in RAM (older items remain queryable in SQLite)"
+      })
   )
   .command("version", "Show version", () => {
     console.log("0.1.5");
@@ -77,14 +89,48 @@ if (cmd !== "start") {
   throw new Error(`Unknown command: ${cmd}`);
 }
 
+const traceDbPath = argv.traceDb ? String(argv.traceDb) : path.join(process.cwd(), ".flowly", "traces.db");
+const sqlite = new SqliteStore({ dbPath: traceDbPath });
+
+// Session state lives with the server process.
+// Default session is created at startup.
+const currentSessionId = crypto.randomUUID();
+sqlite.ensureSession(currentSessionId, []);
+
+let currentSessionTags: string[] = [];
+
+memoryStore.configure({
+  maxInMemory: Number(argv.maxInMemory),
+  persistence: {
+    upsertRequest: (r) => sqlite.upsertRequest(r),
+    clearAll: () => {
+      // keep history by default; clearing RAM should not wipe DB
+    },
+    replaceAll: (items) => {
+      for (const r of items) sqlite.upsertRequest(r);
+    }
+  }
+});
+
 startProxyServer({
   port: Number(argv.port),
   target: String(argv.target),
   ignoreHeaders,
   ignorePaths,
-  maxBodyBytes
+  maxBodyBytes,
+  getCurrentSession: () => ({ id: currentSessionId, tags: currentSessionTags })
 });
-startApiServer({ port: Number(argv.apiPort) });
+
+startApiServer({
+  port: Number(argv.apiPort),
+  sqlite,
+  getCurrentSessionId: () => currentSessionId,
+  setCurrentSessionTags: (tags: unknown) => {
+    currentSessionTags = Array.isArray(tags) ? tags.map(String).filter(Boolean) : [];
+    sqlite.setSessionTags(currentSessionId, currentSessionTags);
+  },
+  getCurrentSessionTags: () => currentSessionTags
+});
 
 const persistPath = argv.persist ? String(argv.persist) : null;
 
@@ -124,6 +170,8 @@ console.log("");
 console.log(c.dim("  Proxy:    ") + c.green(`http://localhost:${argv.port}`) + c.dim(` → ${argv.target}`));
 console.log(c.dim("  API:      ") + c.green(`http://localhost:${argv.apiPort}`));
 console.log(c.dim("  Capture:  ") + c.yellow(`${argv.maxBody?.toLocaleString() ?? 200000} bytes max`));
+console.log(c.dim("  Trace DB: ") + c.yellow(traceDbPath));
+console.log(c.dim("  Session:  ") + c.yellow(currentSessionId));
 if (persistPath) console.log(c.dim("  Persist:  ") + c.yellow(persistPath));
 if (ignoreHeaders.length) console.log(c.dim("  Ignore:   ") + c.yellow(ignoreHeaders.join(", ")));
 if (ignorePaths.length) console.log(c.dim("  Skip:     ") + c.yellow(ignorePaths.join(", ")));

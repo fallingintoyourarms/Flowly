@@ -6,6 +6,7 @@ import { memoryStore } from "../storage/memoryStore.js";
 import { captureRequest } from "./requestCapture.js";
 import { captureResponse } from "./responseCapture.js";
 import type { WebSocketFrame } from "../types/capturedRequest.js";
+import { InsightEngine } from "./insights.js";
 
 export interface ProxyServerOptions {
   port: number;
@@ -13,10 +14,13 @@ export interface ProxyServerOptions {
   ignoreHeaders?: string[];
   ignorePaths?: string[];
   maxBodyBytes?: number;
+  getCurrentSession?: () => { id: string; tags: string[] } | null;
 }
 
 // Track WebSocket connections for frame capture
 const wsConnections = new Map<string, { frames: WebSocketFrame[] }>();
+
+const insightEngine = new InsightEngine();
 
 function shouldIgnorePath(path: string, ignorePaths: string[] | undefined): boolean {
   if (!ignorePaths || ignorePaths.length === 0) return false;
@@ -126,6 +130,15 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
       patch.responseHeaders = stripHeaders(patch.responseHeaders, opts.ignoreHeaders);
       patch.rawResponseHeaders = stripHeaders(patch.rawResponseHeaders, opts.ignoreHeaders);
       memoryStore.update(requestId, patch);
+
+      const current = memoryStore.get(requestId);
+      if (current) {
+        const insights = insightEngine.analyze(current);
+        if (insights.length) {
+          const existing = current.anomalies ?? [];
+          memoryStore.update(requestId, { anomalies: [...existing, ...insights] });
+        }
+      }
       }
 
       const headers: Record<string, string | string[] | undefined> = { ...proxyRes.headers };
@@ -160,6 +173,12 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     const captured = captureRequest(req, body, targetUrl);
     captured.headers = stripHeaders(captured.headers, opts.ignoreHeaders) ?? {};
     captured.rawHeaders = stripHeaders(captured.rawHeaders, opts.ignoreHeaders);
+
+    const sess = opts.getCurrentSession?.();
+    if (sess) {
+      captured.sessionId = sess.id;
+      captured.sessionTags = sess.tags;
+    }
 
     memoryStore.add(captured);
 
@@ -197,6 +216,12 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     if (typeof ctHeader === "string") captured.contentType = ctHeader.split(";")[0]?.trim().toLowerCase();
     captured.headers = stripHeaders(captured.headers, opts.ignoreHeaders) ?? {};
     captured.rawHeaders = stripHeaders(captured.rawHeaders, opts.ignoreHeaders);
+
+    const sess = opts.getCurrentSession?.();
+    if (sess) {
+      captured.sessionId = sess.id;
+      captured.sessionTags = sess.tags;
+    }
     memoryStore.add(captured);
 
     wsConnections.set(captured.id, { frames: [] });

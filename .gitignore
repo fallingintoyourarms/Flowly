@@ -30,3 +30,11 @@ ui/.vite/
 # misc
 coverage/
 flowly-trace.json
+
+# Flowly local trace persistence (SQLite)
+traces.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.flowly/

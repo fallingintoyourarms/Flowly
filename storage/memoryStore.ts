@@ -6,6 +6,12 @@ type StoreEvent =
   | { type: "cleared" }
   | { type: "paused"; paused: boolean };
 
+export interface StorePersistenceAdapter {
+  upsertRequest: (r: CapturedRequest) => void;
+  clearAll?: () => void;
+  replaceAll?: (items: CapturedRequest[]) => void;
+}
+
 /**
  * Simple in-memory store for captured requests.
  *
@@ -17,9 +23,18 @@ type StoreEvent =
 class MemoryStore {
   private readonly requests = new Map<string, CapturedRequest>();
   private readonly order: string[] = [];
-  private readonly max = 500;
+  private max = 500;
   private paused = false;
   private listeners = new Set<(evt: StoreEvent) => void>();
+
+  private persistence?: StorePersistenceAdapter;
+
+  configure(opts: { maxInMemory?: number; persistence?: StorePersistenceAdapter }): void {
+    if (typeof opts.maxInMemory === "number" && Number.isFinite(opts.maxInMemory)) {
+      this.max = Math.max(50, Math.min(50000, Math.floor(opts.maxInMemory)));
+    }
+    this.persistence = opts.persistence;
+  }
 
   subscribe(listener: (evt: StoreEvent) => void): () => void {
     this.listeners.add(listener);
@@ -42,6 +57,7 @@ class MemoryStore {
   clear(): void {
     this.requests.clear();
     this.order.length = 0;
+    this.persistence?.clearAll?.();
     this.emit({ type: "cleared" });
   }
 
@@ -71,6 +87,8 @@ class MemoryStore {
       const r = this.requests.get(id);
       if (r) this.emit({ type: "request_added", request: r });
     }
+
+    this.persistence?.replaceAll?.(this.all());
   }
 
   /**
@@ -83,6 +101,8 @@ class MemoryStore {
     this.requests.set(req.id, req);
     this.order.unshift(req.id);
     this.emit({ type: "request_added", request: req });
+
+    this.persistence?.upsertRequest(req);
 
     while (this.order.length > this.max) {
       const oldestId = this.order.pop();
@@ -99,8 +119,11 @@ class MemoryStore {
   update(id: string, patch: Partial<CapturedRequest>): void {
     const existing = this.requests.get(id);
     if (!existing) return;
-    this.requests.set(id, { ...existing, ...patch });
+    const next = { ...existing, ...patch };
+    this.requests.set(id, next);
     this.emit({ type: "request_updated", id, patch });
+
+    this.persistence?.upsertRequest(next);
   }
 
   /**

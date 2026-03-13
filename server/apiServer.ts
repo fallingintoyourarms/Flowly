@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import type { CapturedRequest } from "../types/capturedRequest.js";
 import { memoryStore } from "../storage/memoryStore.js";
+import type { SqliteStore } from "../storage/sqliteStore.js";
 
 function csvEscape(value: unknown): string {
   const s = value === null || value === undefined ? "" : String(value);
@@ -11,6 +12,10 @@ function csvEscape(value: unknown): string {
 
 export interface ApiServerOptions {
   port: number;
+  sqlite?: SqliteStore;
+  getCurrentSessionId?: () => string;
+  setCurrentSessionTags?: (tags: string[]) => void;
+  getCurrentSessionTags?: () => string[];
 }
 
 async function sendTestRequest(): Promise<{ ok: boolean; error?: string }> {
@@ -101,6 +106,38 @@ export function startApiServer(opts: ApiServerOptions) {
 
   app.get("/requests", (_req, res) => {
     res.json(memoryStore.all());
+  });
+
+  app.get("/requests/history", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const method = typeof req.query.method === "string" ? req.query.method.toUpperCase() : undefined;
+    const statusMin = typeof req.query.statusMin === "string" ? Number(req.query.statusMin) : undefined;
+    const statusMax = typeof req.query.statusMax === "string" ? Number(req.query.statusMax) : undefined;
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const regex = typeof req.query.regex === "string" ? req.query.regex : undefined;
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    const tag = typeof req.query.tag === "string" ? req.query.tag : undefined;
+    const since = typeof req.query.since === "string" ? Number(req.query.since) : undefined;
+    const until = typeof req.query.until === "string" ? Number(req.query.until) : undefined;
+    const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const offsetRaw = typeof req.query.offset === "string" ? Number(req.query.offset) : undefined;
+
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(5000, limitRaw!)) : 500;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw!) : 0;
+
+    if (regex && regex.length > 200) return res.status(400).json({ error: "regex too long" });
+    if (regex) {
+      try {
+        // validation only
+        new RegExp(regex, "i");
+      } catch {
+        return res.status(400).json({ error: "invalid regex" });
+      }
+    }
+
+    const items = opts.sqlite.queryRequests({ method, statusMin, statusMax, q, regex, sessionId, tag, since, until, limit, offset });
+    res.json({ ok: true, count: items.length, items });
   });
 
   app.get("/requests/query", (req, res) => {
@@ -248,6 +285,126 @@ export function startApiServer(opts: ApiServerOptions) {
   app.post("/clear", (_req, res) => {
     memoryStore.clear();
     res.json({ ok: true });
+  });
+
+  app.post("/sessions/start", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const tags = Array.isArray(req.body?.tags) ? req.body.tags.map((t: any) => String(t)).filter(Boolean) : [];
+    const id = crypto.randomUUID();
+    opts.sqlite.ensureSession(id, tags);
+    res.json({ ok: true, sessionId: id, tags });
+  });
+
+  app.get("/sessions/current", (_req, res) => {
+    const id = opts.getCurrentSessionId?.();
+    if (!id) return res.status(404).json({ error: "No current session" });
+    res.json({ ok: true, sessionId: id, tags: opts.getCurrentSessionTags?.() ?? [] });
+  });
+
+  app.post("/sessions/current/tags", (req, res) => {
+    const id = opts.getCurrentSessionId?.();
+    if (!id) return res.status(404).json({ error: "No current session" });
+    const tags = Array.isArray(req.body?.tags) ? req.body.tags.map((t: any) => String(t)).filter(Boolean) : [];
+    opts.setCurrentSessionTags?.(tags);
+    res.json({ ok: true, sessionId: id, tags: opts.getCurrentSessionTags?.() ?? tags });
+  });
+
+  app.get("/sessions", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(2000, limitRaw!)) : 200;
+    res.json({ ok: true, items: opts.sqlite.listSessions(limit) });
+  });
+
+  app.post("/sessions/:id/tags", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const tags = Array.isArray(req.body?.tags) ? req.body.tags.map((t: any) => String(t)).filter(Boolean) : [];
+    opts.sqlite.setSessionTags(req.params.id, tags);
+    res.json({ ok: true, sessionId: req.params.id, tags });
+  });
+
+  app.get("/sessions/:id/requests", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(5000, limitRaw!)) : 2000;
+    const items = opts.sqlite.queryRequests({ sessionId: req.params.id, limit });
+    res.json({ ok: true, sessionId: req.params.id, count: items.length, items });
+  });
+
+  app.get("/sessions/:id/export", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+    const items = opts.sqlite.queryRequests({ sessionId: req.params.id, limit: 5000 });
+    res.json({ ok: true, sessionId: req.params.id, items });
+  });
+
+  app.post("/sessions/:id/replay", async (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const sessionId = req.params.id;
+    const items = opts.sqlite.queryRequests({ sessionId, limit: 5000 });
+
+    // Replay in original order (oldest → newest)
+    items.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+
+    let succeeded = 0;
+    let failed = 0;
+    const replayedIds: string[] = [];
+
+    for (const item of items) {
+      if (!item.targetUrl) {
+        failed++;
+        continue;
+      }
+
+      memoryStore.update(item.id, { replayStatus: "running", replayError: undefined });
+
+      const url = item.targetUrl;
+      const headers: Record<string, string> = { ...item.headers };
+      delete headers["host"];
+      delete headers["content-length"];
+
+      let response: Response;
+      let text: string;
+      try {
+        response = await fetch(url, {
+          method: item.method,
+          headers,
+          body: item.body
+        });
+        text = await response.text();
+      } catch {
+        failed++;
+        memoryStore.update(item.id, {
+          replayStatus: "failed",
+          replayedAt: Date.now(),
+          replayError: "Replay failed (target unreachable)"
+        });
+        continue;
+      }
+
+      const replayed: CapturedRequest = {
+        ...item,
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        responseStatus: response.status,
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+        responseBody: text,
+        duration: undefined
+      };
+
+      memoryStore.add(replayed);
+      replayedIds.push(replayed.id);
+      succeeded++;
+
+      memoryStore.update(item.id, {
+        replayStatus: "succeeded",
+        replayedAt: Date.now(),
+        replayedId: replayed.id,
+        replayError: undefined
+      });
+    }
+
+    res.json({ ok: true, sessionId, count: items.length, succeeded, failed, replayedIds });
   });
 
   app.post("/send-test", async (_req, res) => {

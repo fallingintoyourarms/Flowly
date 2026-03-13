@@ -18,6 +18,24 @@ export interface ApiServerOptions {
   getCurrentSessionTags?: () => string[];
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function normalizePathForGrouping(path: string): string {
+  const base = (path ?? "/").split("?")[0] ?? "/";
+  return base
+    .split("/")
+    .map((seg) => (/^\d{2,}$/.test(seg) ? ":id" : seg))
+    .join("/");
+}
+
+function percentile(sorted: number[], p: number): number | null {
+  if (sorted.length === 0) return null;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))));
+  return sorted[idx] ?? null;
+}
+
 async function sendTestRequest(): Promise<{ ok: boolean; error?: string }> {
   try {
     await fetch("http://127.0.0.1:9090/flowly/test", {
@@ -106,6 +124,158 @@ export function startApiServer(opts: ApiServerOptions) {
 
   app.get("/requests", (_req, res) => {
     res.json(memoryStore.all());
+  });
+
+  app.get("/performance/timeline", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+    const items = opts.sqlite.queryRequests({ sessionId, limit: 5000 });
+    const filtered = items
+      .filter((r) => typeof r.timestamp === "number" && typeof r.duration === "number" && Number.isFinite(r.duration))
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (filtered.length === 0) return res.json({ ok: true, sessionId, window: null, items: [] });
+
+    const start = filtered[0]!.timestamp;
+    const end = Math.max(...filtered.map((r) => r.timestamp + (r.duration ?? 0)));
+
+    const out = filtered.map((r) => ({
+      id: r.id,
+      method: r.method,
+      path: r.path,
+      group: `${r.method.toUpperCase()} ${normalizePathForGrouping(r.path)}`,
+      ts: r.timestamp,
+      duration: r.duration ?? 0,
+      status: r.responseStatus ?? null,
+      protocol: r.protocol ?? "http"
+    }));
+
+    res.json({ ok: true, sessionId, window: { start, end, totalMs: end - start }, items: out });
+  });
+
+  app.get("/performance/slow-endpoints", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+    const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 15;
+    const limit = clamp(Number.isFinite(limitRaw) ? limitRaw : 15, 1, 100);
+
+    const items = opts.sqlite
+      .queryRequests({ sessionId, limit: 5000 })
+      .filter((r) => typeof r.duration === "number" && Number.isFinite(r.duration) && r.duration >= 0);
+
+    const byRoute = new Map<string, number[]>();
+    for (const r of items) {
+      const key = `${r.method.toUpperCase()} ${normalizePathForGrouping(r.path)}`;
+      const arr = byRoute.get(key) ?? [];
+      arr.push(r.duration!);
+      byRoute.set(key, arr);
+    }
+
+    const rows = Array.from(byRoute.entries())
+      .map(([route, durs]) => {
+        const sorted = [...durs].sort((a, b) => a - b);
+        const p95 = percentile(sorted, 95);
+        const p50 = percentile(sorted, 50);
+        const avg = durs.reduce((a, b) => a + b, 0) / Math.max(1, durs.length);
+        return { route, count: durs.length, p50, p95, avg };
+      })
+      .sort((a, b) => (b.p95 ?? 0) - (a.p95 ?? 0))
+      .slice(0, limit);
+
+    res.json({ ok: true, sessionId, items: rows });
+  });
+
+  app.get("/performance/nplus1", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+    const items = opts.sqlite
+      .queryRequests({ sessionId, limit: 5000 })
+      .filter((r) => typeof r.timestamp === "number")
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    const windowMsRaw = typeof req.query.windowMs === "string" ? Number(req.query.windowMs) : 1500;
+    const windowMs = clamp(Number.isFinite(windowMsRaw) ? windowMsRaw : 1500, 200, 10000);
+    const minCountRaw = typeof req.query.minCount === "string" ? Number(req.query.minCount) : 6;
+    const minCount = clamp(Number.isFinite(minCountRaw) ? minCountRaw : 6, 3, 100);
+
+    const buckets = new Map<string, Array<{ id: string; ts: number; path: string; method: string }>>();
+    for (const r of items) {
+      const key = `${r.method.toUpperCase()} ${normalizePathForGrouping(r.path)}`;
+      const arr = buckets.get(key) ?? [];
+      arr.push({ id: r.id, ts: r.timestamp, path: r.path, method: r.method });
+      buckets.set(key, arr);
+    }
+
+    const suspects = Array.from(buckets.entries())
+      .map(([route, events]) => {
+        events.sort((a, b) => a.ts - b.ts);
+        let best: { start: number; end: number; count: number; ids: string[] } | null = null;
+
+        let i = 0;
+        for (let j = 0; j < events.length; j++) {
+          while (events[j]!.ts - events[i]!.ts > windowMs) i++;
+          const count = j - i + 1;
+          if (count >= minCount) {
+            const ids = events.slice(i, j + 1).map((e) => e.id);
+            best = { start: events[i]!.ts, end: events[j]!.ts, count, ids };
+          }
+        }
+
+        if (!best) return null;
+        return { route, ...best };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => b.count - a.count);
+
+    res.json({ ok: true, sessionId, windowMs, minCount, items: suspects });
+  });
+
+  app.get("/performance/critical-path", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+    const items = opts.sqlite
+      .queryRequests({ sessionId, limit: 5000 })
+      .filter((r) => typeof r.timestamp === "number" && typeof r.duration === "number" && Number.isFinite(r.duration))
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (items.length === 0) return res.json({ ok: true, sessionId, totalMs: 0, path: [] });
+
+    const nodes = items.map((r) => ({
+      id: r.id,
+      start: r.timestamp,
+      end: r.timestamp + (r.duration ?? 0),
+      method: r.method,
+      path: r.path,
+      group: `${r.method.toUpperCase()} ${normalizePathForGrouping(r.path)}`
+    }));
+
+    // Greedy overlap chain: walk forward picking the next request that extends the end.
+    nodes.sort((a, b) => a.start - b.start);
+    const chain: typeof nodes = [];
+    let cur = nodes[0]!;
+    chain.push(cur);
+    while (true) {
+      const candidates = nodes.filter((n) => n.start <= cur.end && n.end > cur.end);
+      if (candidates.length === 0) break;
+      candidates.sort((a, b) => b.end - a.end);
+      cur = candidates[0]!;
+      chain.push(cur);
+    }
+
+    const totalMs = chain.length ? chain[chain.length - 1]!.end - chain[0]!.start : 0;
+    res.json({ ok: true, sessionId, totalMs, path: chain });
   });
 
   app.get("/requests/history", (req, res) => {

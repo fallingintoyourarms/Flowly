@@ -2,13 +2,14 @@ import React from "react";
 import type { CapturedRequest } from "../../types/capturedRequest.js";
 import { RequestList } from "./components/RequestList.js";
 import { RequestDetails } from "./components/RequestDetails.js";
+import { PerformanceTimeline } from "./components/PerformanceTimeline.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../src/components/ui/tabs.js";
 import { Badge } from "../src/components/ui/badge.js";
 import { Button } from "../src/components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../src/components/ui/card.js";
 import { Input } from "../src/components/ui/input.js";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../src/components/ui/tooltip.js";
-import { Github, Settings, Activity, List, Pause, Trash2, Send, Upload } from "lucide-react";
+import { Github, Settings, Activity, List, Pause, Trash2, Send, Upload, Gauge } from "lucide-react";
 
 async function fetchRequests(): Promise<CapturedRequest[]> {
   const res = await fetch("/api/requests");
@@ -193,7 +194,7 @@ export function Dashboard() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [paused, setPaused] = React.useState(false);
   const [live, setLive] = React.useState(false);
-  const [tab, setTab] = React.useState<"requests" | "analytics" | "settings">("requests");
+  const [tab, setTab] = React.useState<"requests" | "performance" | "analytics" | "settings">("requests");
 
   const [compareAId, setCompareAId] = React.useState<string | null>(null);
   const [compareBId, setCompareBId] = React.useState<string | null>(null);
@@ -420,6 +421,10 @@ export function Dashboard() {
                   <List className="mr-2 h-4 w-4" />
                   Requests
                 </TabsTrigger>
+                <TabsTrigger value="performance">
+                  <Gauge className="mr-2 h-4 w-4" />
+                  Performance
+                </TabsTrigger>
                 <TabsTrigger value="analytics">
                   <Activity className="mr-2 h-4 w-4" />
                   Analytics
@@ -552,6 +557,15 @@ export function Dashboard() {
                   </div>
                 )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="performance" className="col-span-2">
+              <PerformanceTimeline
+                onSelectRequestId={(id) => {
+                  setSelectedId(id);
+                  setTab("requests");
+                }}
+              />
             </TabsContent>
 
             <TabsContent value="analytics" className="col-span-2">

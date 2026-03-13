@@ -19,6 +19,7 @@ export interface ProxyServerOptions {
 
 // Track WebSocket connections for frame capture
 const wsConnections = new Map<string, { frames: WebSocketFrame[] }>();
+const wsLastSeenByKey = new Map<string, { lastRequestId: string; lastClosedAt: number | null; reconnectCount: number }>();
 
 const insightEngine = new InsightEngine();
 
@@ -61,6 +62,21 @@ function readStreamBody(req: IncomingMessage): Promise<string | undefined> {
     });
     req.on("error", () => resolve(undefined));
   });
+}
+
+function getHeader(req: IncomingMessage, name: string): string | undefined {
+  const v = req.headers[name.toLowerCase()];
+  if (Array.isArray(v)) return v[0];
+  if (typeof v === "string") return v;
+  return undefined;
+}
+
+function computeWsConnectionKey(req: IncomingMessage): string {
+  const host = getHeader(req, "host") ?? "(unknown-host)";
+  const url = req.url ?? "/";
+  const key = getHeader(req, "sec-websocket-key");
+  if (key) return `host=${host} url=${url} key=${key}`;
+  return `host=${host} url=${url}`;
 }
 
 /**
@@ -212,6 +228,7 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     const captured = captureRequest(req, undefined, targetUrl.toString());
     captured.isWebSocket = true;
     captured.protocol = "websocket";
+    captured.connectionKey = computeWsConnectionKey(req);
     const ctHeader = captured.rawHeaders?.["content-type"] ?? captured.rawHeaders?.["Content-Type"];
     if (typeof ctHeader === "string") captured.contentType = ctHeader.split(";")[0]?.trim().toLowerCase();
     captured.headers = stripHeaders(captured.headers, opts.ignoreHeaders) ?? {};
@@ -225,6 +242,26 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
     memoryStore.add(captured);
 
     wsConnections.set(captured.id, { frames: [] });
+
+    const prior = wsLastSeenByKey.get(captured.connectionKey);
+    if (prior) {
+      wsLastSeenByKey.set(captured.connectionKey, {
+        lastRequestId: captured.id,
+        lastClosedAt: prior.lastClosedAt,
+        reconnectCount: prior.reconnectCount + 1
+      });
+    } else {
+      wsLastSeenByKey.set(captured.connectionKey, { lastRequestId: captured.id, lastClosedAt: null, reconnectCount: 0 });
+    }
+
+    const openedFrame: WebSocketFrame = {
+      type: "ping",
+      direction: "client",
+      data: "(ws_open)",
+      timestamp: Date.now()
+    };
+    wsConnections.get(captured.id)?.frames.push(openedFrame);
+    memoryStore.update(captured.id, { wsFrames: wsConnections.get(captured.id)?.frames ?? [] });
 
     proxy.ws(req, socket as any, head, { target: opts.target }, (err: Error | null, targetSocket?: any) => {
       if (err) {
@@ -263,9 +300,29 @@ export function startProxyServer(opts: ProxyServerOptions): http.Server {
 
       // Clean up on close
       socket.on("close", () => {
+        const conn = wsConnections.get(captured.id);
+        if (conn) {
+          conn.frames.push({ type: "close", direction: "client", data: "(ws_close)", timestamp: Date.now() });
+          memoryStore.update(captured.id, { wsFrames: conn.frames });
+        }
+        const key = captured.connectionKey;
+        if (key) {
+          const last = wsLastSeenByKey.get(key);
+          if (last) wsLastSeenByKey.set(key, { ...last, lastClosedAt: Date.now() });
+        }
         wsConnections.delete(captured.id);
       });
       targetSocket?.on("close", () => {
+        const conn = wsConnections.get(captured.id);
+        if (conn) {
+          conn.frames.push({ type: "close", direction: "server", data: "(ws_close)", timestamp: Date.now() });
+          memoryStore.update(captured.id, { wsFrames: conn.frames });
+        }
+        const key = captured.connectionKey;
+        if (key) {
+          const last = wsLastSeenByKey.get(key);
+          if (last) wsLastSeenByKey.set(key, { ...last, lastClosedAt: Date.now() });
+        }
         wsConnections.delete(captured.id);
       });
     });

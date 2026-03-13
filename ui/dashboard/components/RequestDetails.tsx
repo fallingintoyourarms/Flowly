@@ -152,6 +152,9 @@ export function RequestDetails(props: {
   const [editBody, setEditBody] = React.useState("");
   const [editMethod, setEditMethod] = React.useState("");
   const [copyState, setCopyState] = React.useState<"idle" | "copied">("idle");
+  const [wsQuery, setWsQuery] = React.useState("");
+  const [wsDir, setWsDir] = React.useState<"all" | "client" | "server">("all");
+  const [wsType, setWsType] = React.useState<"all" | "text" | "binary" | "ping" | "pong" | "close">("all");
 
   React.useEffect(() => {
     if (!r) return;
@@ -161,6 +164,9 @@ export function RequestDetails(props: {
     setEditMethod(r.method);
     setIsEditing(false);
     setCopyState("idle");
+    setWsQuery("");
+    setWsDir("all");
+    setWsType("all");
   }, [r?.id, revealSensitive]);
 
   const requestHeaders = revealSensitive ? r?.rawHeaders ?? r?.headers : r?.headers;
@@ -169,6 +175,35 @@ export function RequestDetails(props: {
   const hints = React.useMemo(() => (r ? analyzeHttpError(r) : []), [r]);
   const proto = React.useMemo(() => (r ? protocolBadge(r) : null), [r]);
   const protoHints = React.useMemo(() => (r ? protocolInsights(r) : []), [r]);
+
+  const wsFrames = React.useMemo(() => {
+    const frames = Array.isArray(r?.wsFrames) ? r!.wsFrames! : [];
+    return [...frames].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+  }, [r?.wsFrames]);
+
+  const wsBaseTs = React.useMemo(() => {
+    const t0 = r?.timestamp;
+    if (typeof t0 === "number") return t0;
+    return wsFrames.length ? wsFrames[0]!.timestamp : 0;
+  }, [r?.timestamp, wsFrames]);
+
+  const wsFiltered = React.useMemo(() => {
+    const q = wsQuery.trim().toLowerCase();
+    return wsFrames.filter((f) => {
+      if (wsDir !== "all" && f.direction !== wsDir) return false;
+      if (wsType !== "all" && f.type !== wsType) return false;
+      if (!q) return true;
+      const hay = `${f.type}\n${f.direction}\n${f.data ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [wsFrames, wsQuery, wsDir, wsType]);
+
+  function fmtRel(ts: number): string {
+    const d = ts - wsBaseTs;
+    if (!Number.isFinite(d)) return "";
+    if (d >= 1000) return `+${(d / 1000).toFixed(2)}s`;
+    return `+${Math.round(d)}ms`;
+  }
 
   const copyCurl = React.useCallback(async () => {
     if (!r) return;
@@ -434,36 +469,77 @@ export function RequestDetails(props: {
               <CardContent className="space-y-4">
                 {r.isWebSocket ? (
                   <>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="secondary">WebSocket</Badge>
-                      <Badge variant="muted">frames: {(r.wsFrames || []).length}</Badge>
-                    </div>
                     <div className="space-y-2">
-                      {(r.wsFrames || []).length === 0 ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">WebSocket</Badge>
+                          {r.connectionKey && <Badge variant="muted">key: {r.connectionKey}</Badge>}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="muted">frames: {wsFrames.length}</Badge>
+                          <Badge variant="muted">shown: {wsFiltered.length}</Badge>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <Input value={wsQuery} onChange={(e) => setWsQuery(e.target.value)} placeholder="Search frames" />
+                        <select
+                          value={wsDir}
+                          onChange={(e) => setWsDir(e.target.value as any)}
+                          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="all">All directions</option>
+                          <option value="client">Client → Server</option>
+                          <option value="server">Server → Client</option>
+                        </select>
+                        <select
+                          value={wsType}
+                          onChange={(e) => setWsType(e.target.value as any)}
+                          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="all">All types</option>
+                          <option value="text">text</option>
+                          <option value="binary">binary</option>
+                          <option value="ping">ping</option>
+                          <option value="pong">pong</option>
+                          <option value="close">close</option>
+                        </select>
+                      </div>
+
+                      {wsFrames.length === 0 ? (
                         <div className="text-sm text-muted-foreground">No frames captured yet...</div>
                       ) : (
-                        (r.wsFrames || []).map((frame: any, i: number) => {
-                          const outbound = frame.direction === "client";
-                          return (
-                            <div
-                              key={i}
-                              className={
-                                "rounded-md border p-3 " +
-                                (outbound
-                                  ? "border-blue-500/30 bg-blue-500/10"
-                                  : "border-emerald-500/30 bg-emerald-500/10")
-                              }
-                            >
-                              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span>{outbound ? "→ Server" : "← Server"}</span>
-                                <span>{frame.timestamp ? new Date(frame.timestamp).toLocaleTimeString() : ""}</span>
+                        <div className="space-y-2">
+                          {wsFiltered.map((frame: any, i: number) => {
+                            const outbound = frame.direction === "client";
+                            const isControl = frame.type === "ping" || frame.type === "pong" || frame.type === "close";
+                            return (
+                              <div
+                                key={i}
+                                className={
+                                  "rounded-md border p-3 " +
+                                  (isControl
+                                    ? "border-muted bg-muted/20"
+                                    : outbound
+                                      ? "border-blue-500/30 bg-blue-500/10"
+                                      : "border-emerald-500/30 bg-emerald-500/10")
+                                }
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant={outbound ? "secondary" : "success"}>{outbound ? "client" : "server"}</Badge>
+                                    <Badge variant={isControl ? "muted" : "secondary"}>{frame.type}</Badge>
+                                    <span>{frame.timestamp ? fmtRel(frame.timestamp) : ""}</span>
+                                  </div>
+                                  <span>{frame.timestamp ? new Date(frame.timestamp).toLocaleTimeString() : ""}</span>
+                                </div>
+                                <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs">
+                                  {frame.data || "(binary)"}
+                                </pre>
                               </div>
-                              <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs">
-                                {frame.data || "(binary)"}
-                              </pre>
-                            </div>
-                          );
-                        })
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   </>

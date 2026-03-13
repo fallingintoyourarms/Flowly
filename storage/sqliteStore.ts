@@ -87,7 +87,8 @@ export class SqliteStore {
 
         sessionId TEXT,
         sessionTagsJson TEXT,
-        anomaliesJson TEXT
+        anomaliesJson TEXT,
+        connectionKey TEXT
       );
 
       CREATE TABLE IF NOT EXISTS sessions (
@@ -99,8 +100,21 @@ export class SqliteStore {
 
       CREATE INDEX IF NOT EXISTS idx_requests_ts ON requests(timestamp);
       CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(sessionId);
+      CREATE INDEX IF NOT EXISTS idx_requests_conn ON requests(connectionKey);
       CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updatedAt);
     `);
+
+    // Best-effort additive migration for older DBs
+    try {
+      this.db.exec("ALTER TABLE requests ADD COLUMN connectionKey TEXT");
+    } catch {
+      // ignore
+    }
+    try {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_requests_conn ON requests(connectionKey)");
+    } catch {
+      // ignore
+    }
   }
 
   ensureSession(sessionId: string, tags: string[] = []): void {
@@ -135,14 +149,16 @@ export class SqliteStore {
           responseHeadersJson, rawResponseHeadersJson, responseBody,
           isWebSocket, wsFramesJson,
           graphqlJson, grpcJson,
-          sessionId, sessionTagsJson, anomaliesJson
+          sessionId, sessionTagsJson, anomaliesJson,
+          connectionKey
         ) VALUES (
           @id, @timestamp, @method, @path, @targetUrl, @protocol, @contentType, @duration, @responseStatus,
           @headersJson, @rawHeadersJson, @body,
           @responseHeadersJson, @rawResponseHeadersJson, @responseBody,
           @isWebSocket, @wsFramesJson,
           @graphqlJson, @grpcJson,
-          @sessionId, @sessionTagsJson, @anomaliesJson
+          @sessionId, @sessionTagsJson, @anomaliesJson,
+          @connectionKey
         )
         ON CONFLICT(id) DO UPDATE SET
           timestamp = excluded.timestamp,
@@ -165,7 +181,8 @@ export class SqliteStore {
           grpcJson = excluded.grpcJson,
           sessionId = excluded.sessionId,
           sessionTagsJson = excluded.sessionTagsJson,
-          anomaliesJson = excluded.anomaliesJson
+          anomaliesJson = excluded.anomaliesJson,
+          connectionKey = excluded.connectionKey
         `
       )
       .run({
@@ -195,7 +212,8 @@ export class SqliteStore {
 
         sessionId: r.sessionId ?? null,
         sessionTagsJson: safeJsonStringify(r.sessionTags ?? null),
-        anomaliesJson: safeJsonStringify(r.anomalies ?? null)
+        anomaliesJson: safeJsonStringify(r.anomalies ?? null),
+        connectionKey: r.connectionKey ?? null
       });
 
     if (r.sessionId) {

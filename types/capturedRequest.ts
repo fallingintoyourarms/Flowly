@@ -41,6 +41,7 @@ export interface CapturedRequest {
     method?: string;
   };
   isWebSocket?: boolean;
+  connectionKey?: string;
   wsFrames?: WebSocketFrame[];
 
   replayStatus?: "idle" | "running" | "succeeded" | "failed";

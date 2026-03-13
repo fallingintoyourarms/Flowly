@@ -15,6 +15,7 @@ export interface SqliteQueryOptions {
   statusMax?: number;
   sessionId?: string;
   tag?: string;
+  connectionKey?: string;
   since?: number;
   until?: number;
   limit?: number;
@@ -240,6 +241,10 @@ export class SqliteStore {
     if (opts.sessionId) {
       where.push("sessionId = @sessionId");
       params.sessionId = opts.sessionId;
+    }
+    if (opts.connectionKey) {
+      where.push("connectionKey = @connectionKey");
+      params.connectionKey = opts.connectionKey;
     }
     if (typeof opts.since === "number" && Number.isFinite(opts.since)) {
       where.push("timestamp >= @since");

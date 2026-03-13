@@ -146,6 +146,11 @@ export function RequestDetails(props: {
   onReplayed: () => void;
 }) {
   const r = props.request;
+  const [resolvedWsConn, setResolvedWsConn] = React.useState<null | {
+    connectionKey: string;
+    items: Array<{ id: string; timestamp: number; frames: number }>;
+  }>(null);
+  const [wsConnError, setWsConnError] = React.useState<string | null>(null);
   const [revealSensitive, setRevealSensitive] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
   const [editHeaders, setEditHeaders] = React.useState("");
@@ -167,7 +172,44 @@ export function RequestDetails(props: {
     setWsQuery("");
     setWsDir("all");
     setWsType("all");
+    setResolvedWsConn(null);
+    setWsConnError(null);
   }, [r?.id, revealSensitive]);
+
+  React.useEffect(() => {
+    if (!r?.isWebSocket || !r.connectionKey) return;
+    const connectionKey = r.connectionKey;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sp = new URLSearchParams();
+        sp.set("connectionKey", connectionKey);
+        if (r.sessionId) sp.set("sessionId", r.sessionId);
+        const res = await fetch(`/api/websockets/by-connection?${sp.toString()}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (!json?.ok || !Array.isArray(json?.items)) {
+          setWsConnError("Failed to load reconnection info");
+          setResolvedWsConn(null);
+          return;
+        }
+        setResolvedWsConn({
+          connectionKey: String(json.connectionKey ?? r.connectionKey),
+          items: json.items
+            .map((it: any) => ({ id: String(it.id), timestamp: Number(it.timestamp), frames: Number(it.frames ?? 0) }))
+            .filter((it: any) => it.id && Number.isFinite(it.timestamp))
+        });
+        setWsConnError(null);
+      } catch {
+        if (cancelled) return;
+        setWsConnError("Failed to load reconnection info");
+        setResolvedWsConn(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [r?.id, r?.isWebSocket, r?.connectionKey, r?.sessionId]);
 
   const requestHeaders = revealSensitive ? r?.rawHeaders ?? r?.headers : r?.headers;
   const responseHeaders = revealSensitive ? r?.rawResponseHeaders ?? r?.responseHeaders : r?.responseHeaders;
@@ -480,6 +522,34 @@ export function RequestDetails(props: {
                           <Badge variant="muted">shown: {wsFiltered.length}</Badge>
                         </div>
                       </div>
+
+                      {r.connectionKey && (
+                        <div className="rounded-md border bg-muted/20 p-2 text-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs text-muted-foreground">Reconnections (same connection key)</div>
+                            {wsConnError ? <Badge variant="warn">error</Badge> : <Badge variant="muted">ok</Badge>}
+                          </div>
+                          {resolvedWsConn?.items?.length ? (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Badge variant="secondary">connections: {resolvedWsConn.items.length}</Badge>
+                              <Badge variant="muted">
+                                reconnects: {Math.max(0, resolvedWsConn.items.length - 1)}
+                              </Badge>
+                              {resolvedWsConn.items
+                                .slice()
+                                .sort((a, b) => a.timestamp - b.timestamp)
+                                .slice(0, 8)
+                                .map((it) => (
+                                  <Button key={it.id} variant={it.id === r.id ? "secondary" : "ghost"} size="sm" onClick={() => (window.location.hash = `#${it.id}`)}>
+                                    {it.id.slice(0, 6)}
+                                  </Button>
+                                ))}
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-xs text-muted-foreground">{wsConnError ?? "No related connections found"}</div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="grid gap-2 md:grid-cols-3">
                         <Input value={wsQuery} onChange={(e) => setWsQuery(e.target.value)} placeholder="Search frames" />

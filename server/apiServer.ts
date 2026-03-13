@@ -457,6 +457,30 @@ export function startApiServer(opts: ApiServerOptions) {
     res.json({ ok: true });
   });
 
+  app.get("/websockets/by-connection", (req, res) => {
+    if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
+
+    const connectionKey = typeof req.query.connectionKey === "string" ? req.query.connectionKey : undefined;
+    if (!connectionKey) return res.status(400).json({ error: "connectionKey is required" });
+
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+    const items = opts.sqlite
+      .queryRequests({ connectionKey, sessionId, limit: 5000 })
+      .filter((r) => r.isWebSocket)
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map((r) => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        duration: r.duration ?? null,
+        path: r.path,
+        method: r.method,
+        sessionId: r.sessionId ?? null,
+        frames: Array.isArray(r.wsFrames) ? r.wsFrames.length : 0
+      }));
+
+    res.json({ ok: true, connectionKey, items });
+  });
+
   app.post("/sessions/start", (req, res) => {
     if (!opts.sqlite) return res.status(501).json({ error: "SQLite persistence not configured" });
     const tags = Array.isArray(req.body?.tags) ? req.body.tags.map((t: any) => String(t)).filter(Boolean) : [];

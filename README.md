@@ -51,6 +51,6 @@ Open:
 
 ## Troubleshooting
 
-- If the UI can’t reach the API (`ECONNREFUSED 127.0.0.1:9091`):
-  - Confirm Flowly is running on `--apiPort 9091`
+- If the UI can’t reach the API (`ECONNREFUSED 127.0.0.1:9090`):
+  - Confirm Flowly is running on `--apiPort 9090`
   - If you changed `--apiPort`, update `ui/vite.config.ts`
